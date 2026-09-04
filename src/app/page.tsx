@@ -1,3 +1,5 @@
+"use client";
+
 import dynamic from "next/dynamic";
 
 // The editor is client-only (ProseMirror needs the DOM).
