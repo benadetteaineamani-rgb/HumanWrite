@@ -3,5 +3,7 @@ const nextConfig = {
   reactStrictMode: true,
   eslint: { ignoreDuringBuilds: true },
   typescript: { ignoreBuildErrors: true },
+  productionBrowserSourceMaps: false,
+  experimental: { webpackMemoryOptimizations: true },
 };
 export default nextConfig;
