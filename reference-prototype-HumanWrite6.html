@@ -1,0 +1,1943 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>HumanWrite Editor</title>
+<style>
+  :root{
+    /* Stoic-inspired: aubergine identity on parchment/ivory, purple reserved for
+       identity + primary action, never decoration. Diagnostic colour language is
+       stable: purple=repetition/structure, gold=openings/rhythm,
+       terracotta=empty/low-info, sage=strong/leave-alone, grey=note. */
+    --ink:#252229; --paper:#F8F5EF; --panel:#F3EFF6; --line:#DED8DF; --muted:#746E76;
+    --accent:#5B3A70; --accent-dark:#4a2f5c; --accent-2:#76528F; --accent-soft:#EEE8F2;
+    --canvas:#FFFDFC;
+    --gold:#A77B39; --terra:#A7554C; --sage:#657A67; --violet:#76528F;
+    --serif:Georgia,'Iowan Old Style','Palatino Linotype',Palatino,serif;
+    --sans:ui-sans-serif,system-ui,-apple-system,'Segoe UI',Roboto,sans-serif;
+    --mono:ui-monospace,'SF Mono',Menlo,monospace;
+  }
+  *{box-sizing:border-box}
+  html,body{margin:0;height:100%}
+  body{font-family:var(--serif);color:var(--ink);background:var(--paper)}
+  button{font-family:var(--sans)}
+  .app{display:flex;flex-direction:column;height:100vh}
+
+  header{border-bottom:1px solid var(--line);padding:14px 24px;display:flex;align-items:baseline;gap:16px;flex-wrap:wrap}
+  .brand{font-size:19px;font-weight:700;letter-spacing:-.01em;display:flex;align-items:center;color:var(--ink)}
+  .brand .mono{display:inline-flex;align-items:center;justify-content:center;background:var(--accent);color:#fff;font-size:12px;font-weight:700;border-radius:7px;padding:3px 7px;letter-spacing:.02em}
+  .more-item:hover{background:var(--accent-soft)}
+  .tagline{font-family:var(--sans);font-size:12px;color:var(--muted);max-width:520px}
+  .header-actions{margin-left:auto;display:flex;gap:8px}
+
+  .modebar{display:flex;gap:0;padding:0 24px;border-bottom:1px solid var(--line);background:var(--panel);font-family:var(--sans)}
+  .modebar button{border:none;background:none;font-size:13.5px;padding:11px 16px;cursor:pointer;color:var(--muted);border-bottom:2px solid transparent}
+  .modebar button.on{color:var(--ink);border-bottom-color:var(--accent);font-weight:600}
+
+  .body{display:grid;grid-template-columns:210px minmax(0,1fr) 380px;flex:1;min-height:0}
+  .body.focus{grid-template-columns:0 minmax(0,1fr) 0}
+  .body.panel-collapsed{grid-template-columns:210px minmax(0,1fr) 0}
+  .col{overflow-y:auto;min-height:0}
+  .left{border-right:1px solid var(--line);padding:16px 14px;background:var(--panel)}
+  .center{padding:0;display:flex;flex-direction:column}
+  .right{border-left:1px solid var(--line);background:var(--panel);padding:16px 18px}
+
+  /* toolbar */
+  .toolbar{display:flex;flex-wrap:wrap;gap:3px;padding:8px 20px;border-bottom:1px solid var(--line);position:sticky;top:0;background:var(--paper);z-index:5}
+  .tb{border:1px solid transparent;background:none;width:32px;height:30px;border-radius:6px;cursor:pointer;font-size:14px;color:var(--ink);display:inline-flex;align-items:center;justify-content:center}
+  .tb:hover{background:var(--panel)}
+  .tb.on{background:var(--accent);color:#fff}
+  .tb.wide{width:auto;padding:0 9px;font-size:12.5px;font-family:var(--sans)}
+  .tb-sep{width:1px;background:var(--line);margin:4px 5px}
+  .tb b{font-weight:800} .tb i{font-style:italic} .tb u{text-decoration:underline} .tb s{text-decoration:line-through}
+
+  /* editor surface */
+  .editor-wrap{flex:1;overflow-y:auto;display:flex;justify-content:center;padding:44px 24px 160px;background:var(--paper)}
+  #editor{background:var(--canvas)}
+  #editor{width:100%;max-width:720px;font-size:18px;line-height:1.72;outline:none;min-height:60vh}
+  #editor:focus{outline:none}
+  #editor h1{font-size:30px;line-height:1.2;margin:.6em 0 .3em;font-weight:700}
+  #editor h2{font-size:23px;line-height:1.25;margin:1em 0 .3em;font-weight:700}
+  #editor h3{font-size:19px;margin:1em 0 .3em;font-weight:700}
+  #editor p{margin:0 0 .85em}
+  #editor blockquote{margin:.8em 0;padding:.2em 0 .2em 18px;border-left:3px solid var(--accent);color:var(--muted);font-style:italic}
+  #editor ul,#editor ol{margin:0 0 .85em;padding-left:26px}
+  #editor li{margin:.2em 0}
+  #editor a{color:var(--accent);text-decoration:underline}
+  #editor:empty:before{content:attr(data-placeholder);color:#b8b3a8}
+  /* diagnostic underlines injected by the live layer */
+  .hw-mark{border-bottom:2px solid transparent;cursor:help;border-radius:1px}
+  .hw-mark.OPEN{border-bottom-color:var(--gold)}
+  .hw-mark.STORY{border-bottom-color:var(--terra)}
+  .hw-mark.EMPTY{border-bottom-color:var(--terra)}
+  .hw-mark.FORM{border-bottom-color:var(--violet)}
+  .hw-mark.REP{border-bottom-color:var(--violet)}
+  .hw-mark.THIS{border-bottom-style:dashed;border-bottom-color:var(--gold)}
+
+  /* floating menu */
+  #floating{position:absolute;display:none;z-index:40;background:var(--ink);color:#fff;border-radius:9px;padding:5px;box-shadow:0 8px 26px rgba(0,0,0,.28);gap:2px;flex-wrap:wrap;max-width:340px}
+  #floating button{background:none;border:none;color:#fff;font-size:12.5px;padding:6px 9px;border-radius:6px;cursor:pointer;font-family:var(--sans)}
+  #floating button:hover{background:rgba(255,255,255,.16)}
+
+  /* left panel */
+  .left h4,.right h4{font-family:var(--sans);font-size:11px;letter-spacing:.05em;text-transform:uppercase;color:var(--muted);margin:18px 0 8px}
+  .left h4:first-child{margin-top:0}
+  .outline-item{font-family:var(--sans);font-size:13px;padding:4px 8px;border-radius:6px;cursor:pointer;color:var(--ink)}
+  .outline-item:hover{background:#fff}
+  .outline-item.h2{padding-left:18px;color:var(--muted)}
+  .outline-item.h3{padding-left:30px;color:var(--muted);font-size:12px}
+  .docinfo{font-family:var(--sans);font-size:12px;color:var(--muted);line-height:1.9}
+
+  .btn{font-family:var(--sans);cursor:pointer;border:1px solid var(--line);background:#fff;color:var(--ink);padding:7px 12px;border-radius:7px;font-size:12.5px;transition:background .12s}
+  .btn:hover{background:var(--panel)}
+  .btn.on{background:var(--accent);color:#fff;border-color:var(--accent)}
+  .btn.primary{background:var(--accent);color:#fff;border-color:var(--accent);font-weight:600}
+  .btn.primary:hover{background:var(--accent-dark)}
+  .btn.full{width:100%;justify-content:center;padding:10px}
+  .btn:disabled{opacity:.5;cursor:default}
+  .btnrow{display:flex;flex-wrap:wrap;gap:6px}
+
+  /* right panel tabs + cards */
+  .rtabs{display:flex;gap:16px;border-bottom:1px solid var(--line);margin-bottom:14px;font-family:var(--sans)}
+  .rtabs button{border:none;background:none;font-size:13px;padding:8px 2px;cursor:pointer;color:var(--muted);border-bottom:2px solid transparent}
+  .rtabs button.on{color:var(--ink);border-bottom-color:var(--accent);font-weight:600}
+  .card{background:#fff;border:1px solid var(--line);border-radius:10px;padding:14px;margin-bottom:12px}
+  .card .h{font-family:var(--sans);font-size:11px;letter-spacing:.04em;text-transform:uppercase;color:var(--muted);margin:0 0 9px}
+  .pill{display:inline-block;border-radius:20px;padding:2px 10px;font-family:var(--sans);font-size:11.5px;font-weight:600;white-space:nowrap}
+  .pill.Strong,.pill.Low{background:#E4EAE4;color:var(--sage)}
+  .pill.Moderate,.pill.NeedsEditing{background:#f3ead6;color:var(--gold)}
+  .pill.High,.pill.HighlyFormulaic{background:#f3e2df;color:var(--terra)}
+  .indic{display:grid;grid-template-columns:1fr auto;row-gap:9px;font-family:var(--sans);font-size:13px;align-items:center}
+  .indic span:nth-child(odd){color:var(--muted)}
+  .flag{font-family:var(--sans);font-size:13px;line-height:1.55;margin:7px 0}
+  .tag{font-family:var(--sans);font-size:10px;font-weight:700;padding:1px 6px;border-radius:4px;margin-right:5px}
+  .tag.OPEN{background:#F1E7D3;color:#6b4e1f} .tag.STORY{background:#F1E2DF;color:#7a3a30} .tag.EMPTY{background:#F1E2DF;color:#7a3a30}
+  .tag.FORM{background:var(--accent-soft);color:var(--accent)} .tag.REP{background:var(--accent-soft);color:var(--accent)} .tag.STRUCT{background:var(--accent-soft);color:var(--accent)}
+  .dot{display:inline-block;width:8px;height:8px;border-radius:50%;margin-right:6px}
+  .para-head{display:flex;justify-content:space-between;align-items:center;cursor:pointer;font-family:var(--sans);font-size:13px;font-weight:600}
+  .muted{color:var(--muted)}
+  .opmap{font-family:var(--mono);font-size:12px;line-height:1.85}
+  .op-chip{padding:1px 6px;border-radius:4px}
+  .revised{font-size:15.5px;line-height:1.62;white-space:pre-wrap}
+  .note{font-family:var(--sans);font-size:11.5px;color:var(--muted);font-style:italic;margin-top:10px}
+  input.txt,textarea.txt{width:100%;border:1px solid var(--line);border-radius:7px;padding:7px 10px;font-family:var(--sans);font-size:13px}
+  textarea.txt{min-height:64px;resize:vertical}
+  .rng{width:100%}
+  .toast{position:fixed;bottom:20px;left:50%;transform:translateX(-50%);background:var(--ink);color:#fff;padding:9px 16px;border-radius:8px;font-family:var(--sans);font-size:13px;z-index:80;opacity:0;transition:opacity .2s}
+  .toast.show{opacity:1}
+  .err{font-family:var(--sans);font-size:12.5px;color:var(--terra);background:#F1E2DF;padding:9px 11px;border-radius:8px;margin-top:10px}
+  .spinner{width:14px;height:14px;border:2px solid rgba(255,255,255,.4);border-top-color:#fff;border-radius:50%;display:inline-block;animation:spin .7s linear infinite;vertical-align:-2px;margin-right:6px}
+  @keyframes spin{to{transform:rotate(360deg)}}
+  @media (max-width:1080px){ .body{grid-template-columns:1fr} .left,.right{display:none} }
+
+  /* composer bar at the foot of the document (§3 of brief) */
+  .composer{position:sticky;bottom:0;margin:0 auto;max-width:720px;width:100%;padding:12px 0 22px;background:linear-gradient(180deg,transparent,var(--paper) 24%)}
+  .composer-inner{display:flex;align-items:center;gap:8px;background:var(--canvas);border:1px solid var(--line);border-radius:14px;padding:8px 8px 8px 16px;box-shadow:0 2px 12px rgba(37,34,41,.05)}
+  .composer-inner:focus-within{border-color:var(--accent-2);box-shadow:0 2px 16px rgba(91,58,112,.12)}
+  .composer input{flex:1;border:none;outline:none;font-family:var(--sans);font-size:14px;color:var(--ink);background:transparent}
+  .composer .send{width:34px;height:34px;border-radius:10px;border:none;background:var(--accent);color:#fff;font-size:16px;cursor:pointer;flex:none}
+  .composer .send:hover{background:var(--accent-dark)}
+  .composer .send:disabled{opacity:.45}
+  .composer-hint{max-width:720px;margin:0 auto;font-family:var(--sans);font-size:11.5px;color:var(--muted);padding:2px 4px 0}
+
+  /* gutter margin-markers — the restraint interaction (§ brand) */
+  .editor-stage{position:relative;width:100%;max-width:764px}
+  .gutter-dot{position:absolute;left:-4px;width:9px;height:9px;border-radius:50%;cursor:pointer;transform:translateY(4px);transition:transform .15s,box-shadow .15s;z-index:6}
+  .gutter-dot:hover,.gutter-dot.active{transform:translateY(4px) scale(1.5);box-shadow:0 0 0 4px rgba(91,58,112,.12)}
+  .gutter-dot.rep{background:var(--violet)} .gutter-dot.open{background:var(--gold)}
+  .gutter-dot.empty{background:var(--terra)} .gutter-dot.mixed{background:var(--accent)}
+  .stepper{position:fixed;right:24px;bottom:24px;background:var(--canvas);border:1px solid var(--line);border-radius:12px;box-shadow:0 10px 34px rgba(37,34,41,.16);padding:14px 16px;width:300px;font-family:var(--sans);z-index:60;display:none}
+  .stepper.show{display:block}
+  .stepper .count{font-size:11px;color:var(--muted);margin-bottom:6px}
+  .stepper .body{font-size:13px;line-height:1.5;color:var(--ink);margin-bottom:10px}
+  .stepper .conf{font-size:11px;font-weight:600;margin-bottom:6px}
+  .stepper .row{display:flex;gap:6px}
+  .stepper .nav{display:flex;justify-content:space-between;margin-top:10px;font-size:12px}
+  .stepper .nav button{background:none;border:none;color:var(--accent);cursor:pointer;font-family:var(--sans);font-size:12px}
+
+  /* empty state wordmark */
+  .empty-hero{max-width:560px;margin:8vh auto 0;text-align:center}
+  .empty-hero .mono-mark{font-family:var(--serif);font-size:52px;font-weight:700;letter-spacing:-.02em;color:var(--accent)}
+  .empty-hero .mono-mark .hw{display:inline-block;border:2px solid var(--accent);border-radius:12px;padding:2px 12px;margin-right:2px;font-size:38px;vertical-align:middle}
+  .empty-hero p{font-family:var(--serif);font-size:20px;color:#9a94a0;margin:22px 0 26px}
+  .empty-hero .btnrow{justify-content:center}
+</style>
+</head>
+<body>
+<div class="app">
+  <header>
+    <div class="brand"><span class="mono">HW</span>&nbsp;HumanWrite</div>
+    <div class="tagline">A structural writing studio. Diagnostics run locally and describe prose characteristics, not authorship.</div>
+    <div class="header-actions">
+      <button class="btn" id="btnBack" title="Undo last applied edit" disabled>← Back</button>
+      <button class="btn" id="btnFwd" title="Redo" disabled>Forward →</button>
+      <div style="position:relative">
+        <button class="btn" id="btnMore" title="More" style="font-weight:700;letter-spacing:1px">•••</button>
+        <div id="moreMenu" style="position:absolute;top:100%;right:0;margin-top:4px;background:#fff;border:1px solid var(--line);border-radius:9px;box-shadow:0 8px 24px rgba(37,34,41,.12);min-width:180px;display:none;z-index:40;padding:5px;font-family:var(--sans);font-size:13px">
+          <div class="more-item" data-more="projects" style="padding:8px 10px;border-radius:6px;cursor:pointer">Projects</div>
+          <label class="more-item" style="padding:8px 10px;border-radius:6px;cursor:pointer;display:block">Import…<input type="file" id="file" accept=".txt,.md,.markdown,.html,.htm,.docx" style="display:none"></label>
+          <div class="more-item" data-more="export" style="padding:8px 10px;border-radius:6px;cursor:pointer">Export…</div>
+          <div class="more-item" data-more="focus" style="padding:8px 10px;border-radius:6px;cursor:pointer">Focus mode</div>
+        </div>
+      </div>
+    </div>
+  </header>
+
+  <nav class="modebar" id="modebar"></nav>
+
+  <div class="body" id="bodyGrid">
+    <!-- LEFT -->
+    <aside class="col left">
+      <button class="btn primary full" id="newDocBtn" style="margin-bottom:14px">+ New document</button>
+      <div class="docinfo" id="docinfo" style="margin-bottom:16px"></div>
+      <h4>Recent</h4>
+      <div id="recents"></div>
+      <details style="margin-top:16px"><summary style="font-family:var(--sans);font-size:11px;letter-spacing:.05em;text-transform:uppercase;color:var(--muted);cursor:pointer;list-style:none">Outline</summary><div id="outline" style="margin-top:8px"></div></details>
+      <details style="margin-top:10px"><summary style="font-family:var(--sans);font-size:11px;letter-spacing:.05em;text-transform:uppercase;color:var(--muted);cursor:pointer;list-style:none">Versions</summary><div id="versions" style="margin-top:8px"></div></details>
+    </aside>
+
+    <!-- CENTER -->
+    <main class="col center">
+      <div class="toolbar" id="toolbar"></div>
+      <div class="editor-wrap">
+        <div class="editor-stage" id="stage">
+          <div id="gutter"></div>
+          <div id="editor" contenteditable="true" spellcheck="true"
+               data-placeholder="Write, paste or upload something worth refining."></div>
+        </div>
+      </div>
+      <div class="composer" id="composer">
+        <div class="composer-inner">
+          <input id="composerInput" type="text" placeholder="What would you like to improve?  (e.g. “fix repeated openings but keep my terms”)">
+          <button class="send" id="composerSend" title="Send">➤</button>
+        </div>
+        <div class="composer-hint"><span id="aiStatus"></span>Ask in plain words, or say “show me what's wrong” to review without rewriting. Acts on the paragraph at your cursor unless you say “the whole document”.</div>
+      </div>
+    </main>
+
+    <!-- RIGHT -->
+    <aside class="col right" id="rightPanel"></aside>
+  </div>
+</div>
+
+<div id="floating"></div>
+<div class="stepper" id="stepper"></div>
+<div class="toast" id="toast"></div>
+
+<script>
+/* =====================================================================
+   HumanWrite Editor — single-file build
+   Rich text on a structured document model (§90): the editor edits a
+   contenteditable view, but every AI operation runs on parsed block/mark
+   structure so bold, italics, headings and lists survive edits.
+   Diagnostics run locally (§38: indicators, never an authorship score).
+   ===================================================================== */
+(function(){
+"use strict";
+const $=s=>document.querySelector(s), $$=s=>[...document.querySelectorAll(s)];
+const editor=$("#editor");
+
+/* Self-contained sanitizer (no external CDN). Keeps only an allowlist of tags
+   and href attributes; strips scripts, styles, handlers and unknown tags.
+   Exposed as window.DOMPurify so existing guarded calls work unchanged. */
+if(!window.DOMPurify){
+  window.DOMPurify={ sanitize(html,opts){
+    try{
+      const allowTags=new Set((opts&&opts.ALLOWED_TAGS)||["p","h1","h2","h3","strong","b","em","i","u","s","ul","ol","li","blockquote","a","br","div","span"]);
+      const allowAttr=new Set((opts&&opts.ALLOWED_ATTR)||["href"]);
+      const doc=new DOMParser().parseFromString("<div>"+html+"</div>","text/html");
+      const root=doc.body.firstChild||doc.body;
+      (function walk(node){
+        [...node.childNodes].forEach(c=>{
+          if(c.nodeType===1){
+            const tag=c.tagName.toLowerCase();
+            if(tag==="script"||tag==="style"){ c.remove(); return; }
+            if(!allowTags.has(tag)){ while(c.firstChild) node.insertBefore(c.firstChild,c); c.remove(); return; }
+            [...c.attributes].forEach(a=>{ if(!allowAttr.has(a.name.toLowerCase())||/^on/i.test(a.name)||/javascript:/i.test(a.value)) c.removeAttribute(a.name); });
+            walk(c);
+          } else if(c.nodeType===8){ c.remove(); }
+        });
+      })(root);
+      return root.innerHTML;
+    }catch(_){ return (html||"").replace(/<script[\s\S]*?<\/script>/gi,"").replace(/on\w+="[^"]*"/gi,""); }
+  }};
+}
+
+/* ---------------------------------------------------------------------
+   A. STRUCTURED DOCUMENT MODEL  (validated separately before build)
+   A block = {type, runs:[{text,marks:[]}]} or list = {type:'list',ordered,items:[[runs]]}
+   The editor's DOM is the view; we parse it into this model for analysis
+   and for mark-preserving rewrites.
+   --------------------------------------------------------------------- */
+const MARK_TAG={bold:"strong",italic:"em",underline:"u",strike:"s"};
+const OPEN={bold:"<strong>",italic:"<em>",underline:"<u>",strike:"<s>"};
+const CLOSE={bold:"</strong>",italic:"</em>",underline:"</u>",strike:"</s>"};
+const esc=s=>s.replace(/&/g,"&amp;").replace(/</g,"&lt;").replace(/>/g,"&gt;");
+
+function serializeInline(runs){
+  let out="",active=[];
+  for(const run of runs){
+    const want=run.marks||[];
+    for(let i=active.length-1;i>=0;i--) if(!want.includes(active[i])){out+=CLOSE[active[i]];active.splice(i,1);}
+    for(const w of want) if(!active.includes(w)){out+=OPEN[w];active.push(w);}
+    out+=esc(run.text);
+  }
+  for(let i=active.length-1;i>=0;i--) out+=CLOSE[active[i]];
+  return out;
+}
+// Parse a DOM element's children into inline runs, tracking marks.
+function domToRuns(node){
+  const runs=[];
+  (function walk(n,marks){
+    n.childNodes.forEach(c=>{
+      if(c.nodeType===3){ if(c.nodeValue) runs.push({text:c.nodeValue,marks:[...marks]}); return; }
+      if(c.nodeType!==1) return;
+      const t=c.tagName.toLowerCase();
+      let m=marks;
+      if(t==="strong"||t==="b") m=[...marks,"bold"];
+      else if(t==="em"||t==="i") m=[...marks,"italic"];
+      else if(t==="u") m=[...marks,"underline"];
+      else if(t==="s"||t==="strike"||t==="del") m=[...marks,"strike"];
+      else if(t==="br"){ runs.push({text:"\n",marks:[...marks]}); return; }
+      walk(c,m);
+    });
+  })(node,[]);
+  // merge adjacent identical-mark runs
+  const merged=[];
+  for(const r of runs){
+    const last=merged[merged.length-1];
+    if(last && sameMarks(last.marks,r.marks)) last.text+=r.text; else merged.push({text:r.text,marks:r.marks});
+  }
+  return merged.filter(r=>r.text.length);
+}
+const sameMarks=(a,b)=>a.length===b.length&&a.every(x=>b.includes(x));
+
+// Parse the whole editor DOM into a block model.
+function parseDoc(){
+  const blocks=[];
+  editor.childNodes.forEach(node=>{
+    if(node.nodeType===3){ const t=node.nodeValue.trim(); if(t) blocks.push({type:"paragraph",runs:[{text:t,marks:[]}]}); return; }
+    if(node.nodeType!==1) return;
+    const tag=node.tagName.toLowerCase();
+    if(tag==="h1") blocks.push({type:"heading1",runs:domToRuns(node)});
+    else if(tag==="h2") blocks.push({type:"heading2",runs:domToRuns(node)});
+    else if(tag==="h3") blocks.push({type:"heading3",runs:domToRuns(node)});
+    else if(tag==="blockquote") blocks.push({type:"blockquote",runs:domToRuns(node)});
+    else if(tag==="ul"||tag==="ol"){
+      const items=[...node.children].filter(li=>li.tagName.toLowerCase()==="li").map(li=>domToRuns(li));
+      blocks.push({type:"list",ordered:tag==="ol",items});
+    }
+    else if(tag==="p"||tag==="div") blocks.push({type:"paragraph",runs:domToRuns(node)});
+    else blocks.push({type:"paragraph",runs:domToRuns(node)});
+  });
+  return blocks.filter(b=> b.type==="list" ? b.items.length : (b.runs.length && runText(b.runs).trim().length));
+}
+const runText=runs=>runs.map(r=>r.text).join("");
+function blockText(b){ return b.type==="list" ? b.items.map(runText).join("\n") : runText(b.runs); }
+function docText(blocks){ return blocks.map(blockText).join("\n\n"); }
+
+function blockToHTML(b){
+  if(b.type==="list"){
+    const tag=b.ordered?"ol":"ul";
+    return `<${tag}>`+b.items.map(it=>`<li>${serializeInline(it)}</li>`).join("")+`</${tag}>`;
+  }
+  const map={heading1:"h1",heading2:"h2",heading3:"h3",blockquote:"blockquote",paragraph:"p"};
+  const tag=map[b.type]||"p";
+  return `<${tag}>${serializeInline(b.runs)||"<br>"}</${tag}>`;
+}
+function renderDoc(blocks){ editor.innerHTML=blocks.map(blockToHTML).join(""); }
+
+/* ---------------------------------------------------------------------
+   B. DIAGNOSTIC ENGINE (local, deterministic) — ported and unit-tested
+   --------------------------------------------------------------------- */
+const ABBREV=new Set(["mr","mrs","ms","dr","prof","sr","jr","st","vs","etc","eg","ie","cf","al","fig","no","vol","pp","e.g","i.e","u.s","u.k"]);
+function splitSentences(p){
+  const chunks=[]; const re=/[^.!?]+[.!?]+(?:["')\]]+)?|\S[^.!?]*$/g; let m;
+  while((m=re.exec(p))!==null) chunks.push(m[0]);
+  const out=[]; let buf="";
+  for(let i=0;i<chunks.length;i++){
+    buf+=(buf?" ":"")+chunks[i].trim();
+    const lastWord=buf.replace(/[."')\]]+$/,"").split(/\s+/).pop().toLowerCase().replace(/[^a-z.]/g,"");
+    const endsAbbrev=ABBREV.has(lastWord), endsDecimal=/\d\.$/.test(buf), tooShort=buf.replace(/[^a-z]/gi,"").length<2;
+    if(!endsAbbrev&&!endsDecimal&&!tooShort){ out.push(buf.trim()); buf=""; }
+  }
+  if(buf.trim()) out.push(buf.trim());
+  return out.filter(Boolean);
+}
+const tokenize=s=>(s.toLowerCase().match(/[a-z][a-z'-]*/g)||[]);
+const STOP=new Set(("a an the and or but if then else of to in on at by for with as is are was were be been being this that these those it its it's their there here they them he she we you i my our your his her not no nor so than too very can could would should may might must will shall do does did have has had from into over under about above below between within without through during before after while which who whom whose what when where why how all any some each few more most other such only own same also just even still yet however therefore thus hence moreover furthermore additionally consequently").split(/\s+/));
+
+const SYNONYMS={struggled:"difficulty",struggle:"difficulty",reluctant:"difficulty",hesitant:"difficulty",reluctance:"difficulty",unwilling:"difficulty",accept:"trust",trusted:"trust",believe:"trust",verification:"check",verify:"check",checking:"check",checked:"check",confirm:"check",validate:"check",outputs:"airesponse",output:"airesponse",responses:"airesponse",response:"airesponse",answers:"airesponse",results:"airesponse",users:"person",participants:"person",respondents:"person",people:"person",important:"matter",essential:"matter",crucial:"matter",vital:"matter",demonstrate:"show",reveal:"show",indicate:"show",suggest:"show",highlight:"show"};
+const normStem=w=>SYNONYMS[w]||w.replace(/(ing|ed|es|s|ly|tion|ness|ment)$/,"");
+function contentBag(s){const b=new Map();tokenize(s).forEach(w=>{if(STOP.has(w)||w.length<4)return;const k=normStem(w);b.set(k,(b.get(k)||0)+1);});return b;}
+function cosine(a,b){let d=0,na=0,nb=0;a.forEach((v,k)=>{na+=v*v;if(b.has(k))d+=v*b.get(k);});b.forEach(v=>{nb+=v*v;});return na&&nb?d/(Math.sqrt(na)*Math.sqrt(nb)):0;}
+
+function analyseLexical(sentences,minCount){
+  minCount=minCount||3; const counts=new Map(); let total=0;
+  sentences.forEach(s=>tokenize(s).forEach(w=>{if(STOP.has(w)||w.length<3)return;total++;counts.set(w,(counts.get(w)||0)+1);}));
+  const words=total||1;
+  const flagged=[...counts.entries()].filter(([w,c])=>c>=minCount&&c/words>0.012).sort((a,b)=>b[1]-a[1]).slice(0,12).map(([word,count])=>({word,count}));
+  const joined=sentences.join(" ").toLowerCase();
+  const bank=["it is important to","this highlights","what becomes clear","in this context","the findings suggest","this demonstrates","it is worth noting","this suggests that","in order to","due to the fact that","as a result","on the other hand","in terms of","when it comes to","the ability to","a wide range of"];
+  const phrases=bank.map(p=>({phrase:p,count:(joined.match(new RegExp("\\b"+p.replace(/ /g,"\\s+")+"\\b","g"))||[]).length})).filter(x=>x.count>=2).sort((a,b)=>b.count-a.count);
+  return {words:flagged,phrases};
+}
+function openingSig(s){const t=tokenize(s);return {firstWord:t[0]||"",firstTwo:t.slice(0,2).join(" ")};}
+function analyseOpenings(sentences){
+  const sigs=sentences.map(openingSig); const fw={};
+  sigs.forEach(s=>fw[s.firstWord]=(fw[s.firstWord]||0)+1);
+  const repeatedWord=Object.entries(fw).filter(([w,c])=>c>=2&&w).sort((a,b)=>b[1]-a[1]);
+  let run=1,maxC=1; for(let i=1;i<sigs.length;i++){ if(sigs[i].firstWord&&sigs[i].firstWord===sigs[i-1].firstWord){run++;maxC=Math.max(maxC,run);}else run=1; }
+  const thisCount=sigs.filter(s=>s.firstWord==="this").length;
+  const n=sentences.length||1, topShare=repeatedWord.length?repeatedWord[0][1]/n:0;
+  let diversity="High"; if(topShare>=0.5||maxC>=3)diversity="Low"; else if(topShare>=0.34||maxC>=2)diversity="Moderate";
+  return {sigs,repeatedWord,maxConsecutive:maxC,thisCount,diversity};
+}
+const FORMULAIC=["at its core","in today's rapidly evolving","in an era defined by","as we navigate","in the ever-changing landscape","it is important to note that","it is worth noting that","interestingly,","crucially,","importantly,","ultimately,","taken together","what becomes clear is","this underscores","this highlights","this reflects","this demonstrates","this speaks to","this serves as a reminder","this raises important questions","the implications are far-reaching","only time will tell","the journey ahead","moving forward","this is more than","it is not merely","the question is not whether","needless to say","when it comes to","at the end of the day","in a world where","now more than ever","the reality is that","it goes without saying"];
+function analyseFormulaic(lower){
+  return FORMULAIC.map(p=>{const rx=new RegExp("\\b"+p.replace(/[.*+?^${}()|[\]\\]/g,"\\$&").replace(/ /g,"\\s+"),"g");return {phrase:p,count:(lower.match(rx)||[]).length};}).filter(x=>x.count>0).sort((a,b)=>b.count-a.count);
+}
+const ABSTRACT=new Set(("world technology future humanity possibility change transformation journey landscape era age innovation potential opportunity challenge reality truth meaning purpose vision impact power society people everyone something anything nothing thing things way ways development implications questions conversation moment significance importance changes").split(/\s+/));
+const DRAMA=["we live in a world","every morning","millions of people","behind every","as the world continues to evolve","one thing has become","increasingly clear","not merely","deeply human","more than ever before","faster than ever","at the heart of","lies a deeper","in a world where","imagine a","increasingly shaped"];
+const EMPTY_PAT=[/^this is a significant\b/i,/^the implications are profound/i,/^this raises important questions/i,/^the landscape continues to evolve/i,/^this represents a pivotal/i,/^there is much to consider/i,/^this is an important (conversation|topic|issue)/i,/^the possibilities are endless/i,/^this speaks to a broader/i,/^only time will tell/i];
+function concreteness(raw){
+  const toks=tokenize(raw), content=toks.filter(w=>!STOP.has(w));
+  const numbers=(raw.match(/\b\d[\d.,%]*\b/g)||[]).length;
+  const deInit=raw.replace(/(^|[.!?]\s+)([A-Z])/g,"$1 ");
+  const propers=(deInit.match(/\b[A-Z][a-z]{2,}\b/g)||[]).length;
+  const abstractCount=content.filter(w=>ABSTRACT.has(w)).length;
+  const abstractRatio=content.length?abstractCount/content.length:0;
+  const dramaHits=DRAMA.reduce((n,d)=>n+(raw.toLowerCase().includes(d)?1:0),0);
+  return {concrete:numbers*2+propers,abstractRatio,dramaHits,contentLen:content.length};
+}
+function analyseEmptiness(sentences){
+  const story=[],empty=[];
+  sentences.forEach((s,idx)=>{
+    const c=concreteness(s), isPat=EMPTY_PAT.some(rx=>rx.test(s.trim()));
+    if((c.dramaHits>=1||c.abstractRatio>0.5)&&c.concrete===0&&c.contentLen>=4) story.push({idx,sentence:s,reason:c.dramaHits?"dramatic framing without a concrete event":"high abstraction, no specifics"});
+    if(isPat||(c.concrete===0&&c.contentLen>0&&c.contentLen<=6&&c.abstractRatio>0.4)) empty.push({idx,sentence:s,reason:isPat?"recognised low-information template":"few content words, no specifics"});
+  });
+  return {story,empty};
+}
+function analysePatterns(full,lower,sentences){
+  const triads=(full.match(/\b[\w-]+,\s+[\w-]+,?\s+and\s+[\w-]+\b/g)||[]);
+  const contrast=[/\bnot\s+(?:only\s+)?[\w-]+,?\s+but\b/gi,/\bnot\s+(?:simply|merely|just)\b/gi,/\brather than\b/gi,/\bthe question is not\b/gi].reduce((n,rx)=>n+(full.match(rx)||[]).length,0);
+  const tw=["furthermore","moreover","additionally","however","therefore","consequently","importantly","interestingly","ultimately","taken together","in addition"];
+  const transitions=tw.map(t=>({word:t,count:(lower.match(new RegExp("\\b"+t+"\\b","g"))||[]).length})).filter(x=>x.count>0).sort((a,b)=>b.count-a.count);
+  const wordy=[{find:"in order to",to:"to"},{find:"due to the fact that",to:"because"},{find:"has the ability to",to:"can"},{find:"in the context of",to:"in"},{find:"a large number of",to:"many"},{find:"with regard to",to:"about"}].map(w=>({...w,count:(lower.match(new RegExp("\\b"+w.find.replace(/ /g,"\\s+")+"\\b","g"))||[]).length})).filter(x=>x.count>0);
+  return {triads,contrastCount:contrast,transitions,wordy};
+}
+function analyseRhythm(sentences){
+  const lens=sentences.map(s=>tokenize(s).length);
+  const avg=lens.reduce((a,b)=>a+b,0)/(lens.length||1);
+  let run=1,maxS=1; for(let i=1;i<lens.length;i++){ if(Math.abs(lens[i]-lens[i-1])<=3){run++;maxS=Math.max(maxS,run);}else run=1; }
+  return {avg:Math.round(avg),lens,maxSimilar:maxS};
+}
+function analyseParagraph(text){
+  const sentences=splitSentences(text), lower=text.toLowerCase();
+  const openings=analyseOpenings(sentences), lexical=analyseLexical(sentences,3), formulaic=analyseFormulaic(lower);
+  const emptiness=analyseEmptiness(sentences), patterns=analysePatterns(text,lower,sentences), rhythm=analyseRhythm(sentences);
+  let flags=0;
+  if(openings.diversity==="Low")flags+=2; else if(openings.diversity==="Moderate")flags+=1;
+  if(formulaic.reduce((a,b)=>a+b.count,0)>=2)flags+=1;
+  flags+=emptiness.story.length; if(emptiness.empty.length)flags+=1; if(lexical.words.length)flags+=1; if(rhythm.maxSimilar>=4)flags+=1;
+  let health="Strong"; if(flags>=4)health="Highly Formulaic"; else if(flags>=2)health="Needs Editing";
+  return {sentences,openings,lexical,formulaic,emptiness,patterns,rhythm,health};
+}
+const level=x=> x>=3?"High":x>=1?"Moderate":"Low";
+function analyseDocument(blocks){
+  // analyse only textual blocks; keep block reference for scroll-to
+  const paras=blocks.map((b,i)=>({index:i,type:b.type,text:blockText(b)})).filter(p=>p.text.trim() && p.type!=="list");
+  const perPara=paras.map(p=>({...p,...analyseParagraph(p.text)}));
+  const allS=[]; perPara.forEach(p=>p.sentences.forEach(s=>allS.push({text:s,ref:p.index})));
+  // conceptual repetition across sentences
+  const bags=allS.map(u=>contentBag(u.text)); const conceptual=[];
+  for(let i=0;i<allS.length;i++)for(let j=i+1;j<allS.length;j++){ if(bags[i].size<3||bags[j].size<3)continue; const sim=cosine(bags[i],bags[j]); if(sim>=0.35)conceptual.push({sim,a:allS[i],b:allS[j]}); }
+  conceptual.sort((x,y)=>y.sim-x.sim);
+  const full=paras.map(p=>p.text).join("\n\n"), lower=full.toLowerCase();
+  const docLexical=analyseLexical(splitSentences(full.replace(/\n+/g," ")),5);
+  const docFormulaic=analyseFormulaic(lower);
+  const docPatterns=analysePatterns(full,lower,allS.map(s=>s.text));
+  const words=tokenize(full).length;
+  const indicators={
+    formulaicRisk:level(docFormulaic.reduce((a,b)=>a+b.count,0)/Math.max(1,words/200)),
+    openingRepetition:level(perPara.filter(p=>p.openings.diversity!=="High").length/Math.max(1,perPara.length)*3),
+    emptyStorytelling:level(perPara.reduce((a,b)=>a+b.emptiness.story.length,0)),
+    lowInformation:level(perPara.reduce((a,b)=>a+b.emptiness.empty.length,0)),
+    conceptualRepetition:level(conceptual.length),
+    wordiness:level(docPatterns.wordy.reduce((a,b)=>a+b.count,0))
+  };
+  return {perPara,conceptual:conceptual.slice(0,8),docLexical,docFormulaic,docPatterns,words,indicators,
+    counts:{paragraphs:paras.length,sentences:allS.length,words}};
+}
+
+/* ---------------------------------------------------------------------
+   C. REWRITE ENGINE (API-backed) — operates on the structured model.
+   To preserve formatting (§89): we send the block's plain text to the
+   editor model, get revised text back, then re-attach the block's TYPE
+   and re-apply any marks whose exact spans survive verbatim in the output.
+   --------------------------------------------------------------------- */
+const TASK_PROMPTS={
+  removeRepetition:"Remove repeated words, phrases, ideas and structural patterns. Hierarchy: DELETE > MERGE > RESTRUCTURE > REWRITE > PARAPHRASE. Keep necessary technical terms even if repeated; do not swap synonyms mechanically.",
+  fixOpenings:"Revise only sentence openings and architecture so consecutive sentences do not begin with the same word or pattern. Preserve every claim and all evidence. Do not add filler transitions.",
+  fixParaOpenings:"Diversify how paragraphs begin. Improve architecture, not synonyms. Preserve meaning.",
+  removeStorytelling:"Remove empty storytelling: scene-setting, dramatic framing and manufactured profundity that add atmosphere but no concrete information. Keep genuine narrative. Never invent details.",
+  removeEmpty:"Delete or sharpen low-information sentences. Prefer deletion. Make specific only using information already present. Never invent information.",
+  removeFormulaic:"Rewrite AI-style templates and formulaic phrases only where they do rhetorical rather than intellectual work.",
+  tighten:"Remove unnecessary words while preserving meaning and argument. Do not flatten intellectual complexity.",
+  improveFlow:"Improve the logical relationship between ideas without adding announced transitions.",
+  makeDirect:"Move the actual claim closer to the beginning. Reduce throat-clearing.",
+  makeNatural:"Reduce mechanical rhythm and excessive polish. Allow understated, direct sentences.",
+  clarify:"Clarify unclear pronouns and vague references. Name the subject of ambiguous 'this', 'it', 'they'.",
+  strengthenArgument:"Tighten weak claims and unsupported leaps. Do NOT invent evidence, references or data, or raise epistemic certainty beyond the text.",
+  preserveVoice:"Apply only minimal edits. Correct clear problems; leave the author's voice intact.",
+  deepEdit:"Deep editorial rewrite: restructure where useful while preserving all factual content and meaning."
+};
+const MODE_G={Academic:"Prioritise precision, epistemic caution, evidence, disciplinary terminology. 'suggests'≠'demonstrates'; 'may influence'≠'causes'.",Executive:"Prioritise clarity, decision-relevance, brevity, authority, specificity.","Book / Long-form":"Prioritise voice, rhythm, narrative flow, originality, paragraph variation.","Thought Leadership":"Prioritise insight, argument, distinctive perspective. Avoid clichés and performative inspiration.",Reflective:"Prioritise genuine introspection, specificity, restraint. Avoid manufactured profundity."};
+const INT_G={"Proofread Only":"Only grammar, punctuation, obvious errors.","Light Edit":"Remove obvious slop and repetition; change little else.","Standard Edit":"Improve rhythm, openings, clarity, repetition.","Strong Edit":"Restructure sentences and, where useful, paragraphs.","Deep Editorial Rewrite":"Reconstruct prose while preserving all factual content and meaning."};
+
+/* ---------------------------------------------------------------------
+   GROUNDING LIBRARY — each fix cites an established writing principle and,
+   crucially, points at the specific evidence in YOUR text that triggers it.
+   Sources: Strunk & White (Elements of Style); Gopen & Swan (The Science of
+   Scientific Writing, American Scientist 1990); Williams (Style); Zinsser
+   (On Writing Well). Diagnose functions run on the whole document text.
+   --------------------------------------------------------------------- */
+const WORDY_MAP=[["in order to","to"],["due to the fact that","because"],["has the ability to","can"],["have the ability to","can"],["at this point in time","now"],["in the event that","if"],["a large number of","many"],["in spite of the fact that","although"],["with regard to","about"],["in the context of","in"],["for the purpose of","to"]];
+const FILLER_PHRASES=["it is important to note that","it is worth noting that","needless to say","at the end of the day","in today's world","in a world where","when it comes to","the fact of the matter is"];
+const GROUNDING={
+  removeRepetition:{
+    title:"Remove repetition",
+    principle:"A paragraph should contain no unnecessary sentences; repeated ideas dilute emphasis.",
+    source:"Strunk & White, Elements of Style, Rule 17",
+    diagnose(a){ const ev=[];
+      a.perPara.forEach(p=>{ if(p.lexical.words.length) ev.push(`Para ${p.index+1}: "${p.lexical.words[0].word}" repeats ${p.lexical.words[0].count}×`); });
+      a.conceptual.slice(0,2).forEach(c=>ev.push(`Paras ${c.a.ref+1} & ${c.b.ref+1} may make the same point (≈${Math.round(c.sim*100)}%)`));
+      return ev; }
+  },
+  fixOpenings:{
+    title:"Fix sentence openings",
+    principle:"Vary the topic position; when successive sentences share a subject and reporting verb, the prose reads mechanically.",
+    source:"Gopen & Swan, The Science of Scientific Writing (1990)",
+    diagnose(a){ const ev=[];
+      a.perPara.forEach(p=>{ if(p.openings.diversity!=="High"){ const rw=p.openings.repeatedWord.filter(([,c])=>c>=2)[0];
+        const arc=analyseArchetypes(p.sentences);
+        ev.push(`Para ${p.index+1}: ${rw?`"${rw[0]}" begins ${rw[1]} sentences`:"repeated openings"}${arc.dominant?`; ${arc.dominant[1]} share the ${archName(arc.dominant[0])} shape`:""}`); } });
+      return ev; }
+  },
+  removeEmpty:{
+    title:"Remove empty writing",
+    principle:"Every unit of discourse should serve a single point; a sentence that gestures without specifics earns no place.",
+    source:"Gopen & Swan (1990); Zinsser, On Writing Well",
+    diagnose(a){ const ev=[];
+      a.perPara.forEach(p=>{ p.emptiness.empty.forEach(e=>ev.push(`Para ${p.index+1}: "${e.sentence.slice(0,52)}…" — ${e.reason}`));
+        p.emptiness.story.forEach(s=>ev.push(`Para ${p.index+1}: atmosphere without a concrete event`)); });
+      return ev; }
+  },
+  clarify:{
+    title:"Make clearer",
+    principle:"Keep the grammatical subject close to its verb; name the referent of an ambiguous 'this' or 'it'.",
+    source:"Williams, Style: Lessons in Clarity and Grace; Gopen & Swan (1990)",
+    diagnose(a){ const ev=[];
+      a.perPara.forEach(p=>{ const thisOpen=p.openings.thisCount; if(thisOpen>=2) ev.push(`Para ${p.index+1}: "This" opens ${thisOpen} sentences without a named referent`); });
+      return ev; }
+  },
+  improveFlow:{
+    title:"Improve flow",
+    principle:"Put old information in the topic position to link backward, new information in the stress position.",
+    source:"Gopen & Swan, The Science of Scientific Writing (1990)",
+    diagnose(a){ const ev=[];
+      a.docPatterns.transitions.filter(t=>t.count>=2).forEach(t=>ev.push(`"${t.word}" used ${t.count}× — transitions may be doing structural work the sentences should do`));
+      return ev; }
+  },
+  tighten:{
+    title:"Tighten",
+    principle:"Omit needless words. Vigorous writing is concise — every word should tell.",
+    source:"Strunk & White, Elements of Style, Rule 17",
+    diagnose(a){ const ev=[]; const lower=a._fullLower||"";
+      WORDY_MAP.forEach(([f,t])=>{ if(new RegExp("\\b"+f.replace(/ /g,"\\s+")+"\\b","i").test(lower)) ev.push(`"${f}" → "${t}"`); });
+      FILLER_PHRASES.forEach(f=>{ if(lower.includes(f)) ev.push(`filler: "${f}"`); });
+      return ev.slice(0,6); }
+  },
+  removeFormulaic:{
+    title:"Remove formulaic writing",
+    principle:"Worn transitional and inspirational phrases take up space without telling the reader anything.",
+    source:"Zinsser, On Writing Well (on clutter); Strunk & White",
+    diagnose(a){ return a.docFormulaic.slice(0,6).map(f=>`"${f.phrase}"${f.count>1?` ×${f.count}`:""}`); }
+  },
+  fixParaOpenings:{
+    title:"Fix paragraph openings",
+    principle:"Begin paragraphs with a topic sentence; repeated paragraph openings flatten structure.",
+    source:"Strunk & White, Elements of Style",
+    diagnose(a){ const counts={}; a.perPara.forEach(p=>{const w=p.sentences[0]?openingSig(p.sentences[0]).firstWord:"";if(w)counts[w]=(counts[w]||0)+1;});
+      return Object.entries(counts).filter(([,c])=>c>=2).map(([w,c])=>`"${w}" opens ${c} paragraphs`); }
+  },
+  strengthenArgument:{
+    title:"Strengthen argument",
+    principle:"Match the strength of a claim to its evidence; 'suggests' is not 'demonstrates'.",
+    source:"Editorial convention; Williams, Style",
+    diagnose(a){ const ev=[]; const lower=a._fullLower||"";
+      ["clearly","obviously","undoubtedly","it is evident that","proves that"].forEach(w=>{ if(lower.includes(w)) ev.push(`"${w}" asserts certainty the evidence may not carry`); });
+      return ev; }
+  },
+  removeStorytelling:{
+    title:"Remove empty storytelling",
+    principle:"Narrative earns its place through a specific event, person or consequence — not atmosphere alone.",
+    source:"Zinsser, On Writing Well; Gardner, The Art of Fiction",
+    diagnose(a){ const ev=[]; a.perPara.forEach(p=>p.emptiness.story.forEach(s=>ev.push(`Para ${p.index+1}: "${s.sentence.slice(0,52)}…"`))); return ev; }
+  },
+  deepEdit:{ title:"Deep edit", principle:"A thorough structural rewrite that preserves meaning, evidence and voice.", source:"Editorial practice", diagnose(){ return []; } }
+};
+function buildFixSuggestions(a){
+  if(!a) return [];
+  a._fullLower=a.perPara.map(p=>p.text).join(" ").toLowerCase();
+  const recommended=["removeRepetition","fixOpenings","removeEmpty","clarify","improveFlow","tighten"];
+  const advanced=["removeFormulaic","fixParaOpenings","strengthenArgument","deepEdit"];
+  const build=id=>{ const g=GROUNDING[id]; const ev=g.diagnose(a); return {id,title:g.title,principle:g.principle,source:g.source,evidence:ev,found:ev.length>0}; };
+  return {recommended:recommended.map(build),advanced:advanced.map(build)};
+}
+
+/* =====================================================================
+   WRITING INTELLIGENCE LIBRARY
+   HumanWrite does not teach people to sound like a named author. It learns
+   what strong writing DOES, then helps writers achieve those qualities in
+   their own voice. Three separate things: Writing Intelligence (general
+   craft), My Voice (the user's own samples), Document Purpose (this piece).
+   Author/title/source are INTERNAL provenance only — never user-facing
+   style labels.
+   ===================================================================== */
+
+// §2 Rights classification.
+const WI_RIGHTS={
+  GREEN:{label:"Approved open corpus",note:"Licensed for reuse and analysis, subject to licence."},
+  BLUE:{label:"Public-domain candidate",note:"A reputable repository identifies it as public domain in its jurisdiction. Worldwide status not assumed."},
+  AMBER:{label:"Analysis / reference",note:"Legitimately accessible, but reuse/training rights not established."},
+  RED:{label:"Do not ingest",note:"Rights do not support ingestion."}
+};
+
+// §1–§15 Source registry. INTERNAL provenance. Every entry is catalogued but
+// ingested:false — none of these texts has been retrieved or stored, because
+// the source domains are not reachable from this build. Claiming otherwise
+// would violate the brief's requirement #8. The architecture is ready; the
+// corpus is honestly empty of retrieved text.
+const WI_SOURCES=[
+  {id:"src-essien-adler-2025",title:"Language in mathematics education in Africa: recent growth and leadership",author:"Essien & Adler",url:"https://link.springer.com/article/10.1007/s11858-025-01698-9",genre:"Scholarly synthesis",rights:"GREEN",licence:"CC BY 4.0",approvedForCorpus:true,approvedForAnalysisOnly:true,ingested:false},
+  {id:"src-essien-thesis",title:"Preparing pre-service mathematics teachers to teach in multilingual classrooms",author:"Essien",url:"https://wiredspace.wits.ac.za/items/a80bfc58-5dfb-4174-be70-504786ae2756",genre:"Doctoral thesis",rights:"AMBER",licence:"Rights review pending",approvedForCorpus:false,approvedForAnalysisOnly:true,ingested:false},
+  {id:"src-phakeng-moschkovich",title:"Mathematics Education and Language Diversity: A Dialogue Across Settings",author:"Phakeng & Moschkovich",url:"https://escholarship.org/uc/item/0729z3nw",genre:"Scholarly dialogue",rights:"AMBER",licence:"Verify before ingestion",approvedForCorpus:false,approvedForAnalysisOnly:true,ingested:false},
+  {id:"src-african-storybook",title:"African Storybook (per-story licence inspection required)",author:"Various",url:"https://www.africanstorybook.org/",genre:"Children's narrative",rights:"AMBER",licence:"Per-story; inspect individually",approvedForCorpus:false,approvedForAnalysisOnly:true,ingested:false},
+  {id:"src-african-farm",title:"The Story of an African Farm",author:"Schreiner",url:"https://www.gutenberg.org/ebooks/1441",genre:"Literary fiction",rights:"BLUE",licence:"PD in USA; verify jurisdiction",approvedForCorpus:false,approvedForAnalysisOnly:true,ingested:false},
+  {id:"src-common-reader",title:"The Common Reader",author:"Woolf",url:"https://www.gutenberg.org/ebooks/64457",genre:"Literary essay",rights:"BLUE",licence:"PD in USA; verify jurisdiction",approvedForCorpus:false,approvedForAnalysisOnly:true,ingested:false},
+  {id:"src-douglass",title:"Narrative of the Life of Frederick Douglass",author:"Douglass",url:"https://www.gutenberg.org/ebooks/23",genre:"Memoir / testimony",rights:"BLUE",licence:"PD in USA; verify jurisdiction",approvedForCorpus:false,approvedForAnalysisOnly:true,ingested:false},
+  {id:"src-jacobs",title:"Incidents in the Life of a Slave Girl",author:"Jacobs",url:"https://www.gutenberg.org/ebooks/11030",genre:"Memoir / testimony",rights:"BLUE",licence:"PD in USA; verify jurisdiction",approvedForCorpus:false,approvedForAnalysisOnly:true,ingested:false},
+  {id:"src-souls",title:"The Souls of Black Folk",author:"Du Bois",url:"https://www.gutenberg.org/ebooks/408",genre:"Social essay",rights:"BLUE",licence:"PD in USA; verify jurisdiction",approvedForCorpus:false,approvedForAnalysisOnly:true,ingested:false},
+  {id:"src-earnest",title:"The Importance of Being Earnest",author:"Wilde",url:"https://www.gutenberg.org/ebooks/844",genre:"Drama / dialogue",rights:"BLUE",licence:"PD in USA; verify jurisdiction",approvedForCorpus:false,approvedForAnalysisOnly:true,ingested:false},
+  {id:"src-pride",title:"Pride and Prejudice",author:"Austen",url:"https://www.gutenberg.org/ebooks/1342",genre:"Novelistic dialogue",rights:"BLUE",licence:"PD in USA; verify jurisdiction",approvedForCorpus:false,approvedForAnalysisOnly:true,ingested:false},
+  {id:"src-middlemarch",title:"Middlemarch",author:"Eliot",url:"https://www.gutenberg.org/ebooks/145",genre:"Psychological fiction",rights:"BLUE",licence:"PD in USA; verify jurisdiction",approvedForCorpus:false,approvedForAnalysisOnly:true,ingested:false},
+  {id:"src-south",title:"South",author:"Shackleton",url:"https://www.gutenberg.org/ebooks/5199",genre:"Narrative non-fiction",rights:"BLUE",licence:"PD in USA; verify jurisdiction",approvedForCorpus:false,approvedForAnalysisOnly:true,ingested:false}
+];
+
+// §24 Principle library — principles, not templates. Each records where it
+// applies, how weakness shows, the editorial response, and what NOT to do.
+const WI_PRINCIPLES=[
+  {id:"reflection-from-experience",principle:"Reflection is stronger when it grows from a specific experience rather than preceding one.",appliesTo:["Memoir","Reflective writing","Personal essay","Narrative non-fiction"],weak:"An abstract or philosophical statement arrives before any concrete observation or event.",response:"Ask whether the reflection can be grounded in a specific observation the passage already contains.",doNot:"Invent an event or detail for the writer.",confidence:"Editorial judgement"},
+  {id:"evidence-vs-interpretation",principle:"Evidence and interpretation perform different functions; restating evidence is not interpreting it.",appliesTo:["Scholarly precision","Evidence and interpretation","Investigative writing","Research made accessible"],weak:"The passage repeats what the evidence says without stating what follows from it.",response:"Identify what the evidence establishes, then ask what interpretation it supports.",doNot:"Strengthen a claim beyond what the evidence carries.",confidence:"Strong signal"},
+  {id:"emotion-need-not-be-named",principle:"Emotion need not be named when the scene has already communicated it.",appliesTo:["Literary narrative","Memoir","Character and interior life","Narrative non-fiction"],weak:"A scene demonstrates an emotion and the next sentence explains the same emotion.",response:"Flag the explanatory sentence as possibly unnecessary and let the writer decide.",doNot:"Delete it automatically.",confidence:"Editorial judgement"},
+  {id:"trust-the-work-done",principle:"Trust the work the writing has already done; a scene or a body of evidence rarely needs a sentence restating its point.",appliesTo:["Narrative restraint","Scholarly precision","Reflective writing","All forms"],weak:"A summarising or moralising sentence follows a passage that already made the point.",response:"Ask whether the closing sentence adds evidence, qualification or genuinely new interpretation.",doNot:"Remove it without offering the writer the choice.",confidence:"Strong signal"},
+  {id:"specificity-locates",principle:"Concrete detail earns its place by locating the reader, establishing mood, revealing character or changing understanding — not by accumulating adjectives.",appliesTo:["Sense of place","Literary narrative","Narrative non-fiction","Description"],weak:"Descriptive detail accumulates without doing locating, revealing or foreshadowing work.",response:"Ask what each detail accomplishes and whether anything meaningful disappears if it is cut.",doNot:"Assume more adjectives means better description.",confidence:"Editorial judgement"},
+  {id:"terminology-precision",principle:"A precise technical term may repeat because the concept remains the subject; synonym variation can reduce precision.",appliesTo:["Scholarly precision","Research made accessible","Technical writing"],weak:"A necessary term is replaced by looser synonyms to avoid repetition.",response:"Keep the precise term where the concept is the subject; vary only where precision is not at stake.",doNot:"Flag necessary terminology as mere repetition.",confidence:"Strong signal"},
+  {id:"implication-over-explicitness",principle:"Explicitness is not the same as clarity; intentional implication can be stronger than statement.",appliesTo:["Short fiction","Dialogue and subtext","Literary narrative"],weak:"Subtext is explained immediately after it has been shown.",response:"Ask whether the reader already understands, and whether the explanation reduces the effect.",doNot:"Treat deliberate omission as unclear writing.",confidence:"Editorial judgement"}
+];
+
+// §28 User-facing categories — derived from writing FUNCTION, never author name.
+const WI_CATEGORIES=[
+  {group:"Scholarly & research",items:["Scholarly Precision","Scholarly Synthesis","Scholarly Dialogue","Evidence and Interpretation","Research Made Accessible","Public Scholarship","Critical Scholarship"]},
+  {group:"Narrative & literary",items:["Literary Narrative","Narrative Restraint","Sense of Place","Character and Interior Life","Dialogue and Subtext","Short Fiction","Long-form Fiction","Narrative Non-fiction"]},
+  {group:"Essay & reflection",items:["Literary Essay","Reflective Writing","Philosophical Reflection","Personal Testimony","Memoir","Biography"]},
+  {group:"Professional & public","items":["Executive Writing","Thought Leadership","Persuasive Writing","Speech Writing","Investigative Writing"]},
+  {group:"Educational",items:["Children's Narrative","Accessible Educational Writing"]}
+];
+
+// §21 Repetition taxonomy — what the repetition accomplishes, not whether it repeats.
+const WI_REPETITION_TYPES={
+  "technical-terminology":"A precise term recurs because the concept is the subject. Usually keep.",
+  "motif":"A recurring image or phrase carrying thematic weight. Keep.",
+  "rhetorical":"Deliberate repetition for emphasis or cadence. Keep unless overused.",
+  "developmental":"The same idea returns while genuinely advancing. Keep.",
+  "necessary-recurrence":"Ordinary re-mention the passage needs. Usually keep.",
+  "conceptual-return":"An idea restated without adding evidence or interpretation. Review.",
+  "structural":"Paragraphs or sentences built to the same pattern repeatedly. Review.",
+  "mechanical":"Sentences opening the same way within a paragraph. Usually revise.",
+  "accidental":"Unintended word echo close together. Often revise."
+};
+function classifyRepetitionKind({isTechnical,isSentenceStart,count,acrossParagraphs}){
+  if(isTechnical) return "technical-terminology";
+  if(isSentenceStart && count>=3) return "mechanical";
+  if(isSentenceStart && count>=2) return "structural";
+  if(acrossParagraphs) return "conceptual-return";
+  if(count>=4) return "conceptual-return";
+  return "necessary-recurrence";
+}
+
+// Corpus status summary — honest counts for the UI.
+function wiCorpusStatus(){
+  const total=WI_SOURCES.length;
+  const ingested=WI_SOURCES.filter(s=>s.ingested).length;
+  const byRights={}; Object.keys(WI_RIGHTS).forEach(k=>byRights[k]=WI_SOURCES.filter(s=>s.rights===k).length);
+  return {total,ingested,byRights};
+}
+
+function buildSystem(cfg){
+  const tasks=cfg.tasks.map(t=>"- "+TASK_PROMPTS[t]).filter(Boolean).join("\n");
+  let s=`You are a highly experienced human editor inside a structural writing tool. You improve prose that is grammatical but mechanical, repetitive, formulaic, vague or over-polished, while preserving the writer's ideas, evidence, authority and voice.
+
+CORE PRINCIPLE: Every sentence must earn its place. Before rewriting a repetitive or empty sentence, ask whether it needs to exist. Hierarchy: DELETE > MERGE > RESTRUCTURE > REWRITE > PARAPHRASE.
+
+NEVER fabricate references, citations, findings, quotations, statistics, methods or dates; never alter numbers unless asked; never raise epistemic certainty beyond the evidence; never replace a precise technical term with a synonym for variety; never over-polish or make every sentence elegant; never rewrite a sentence that is already clear, specific, natural and necessary.
+
+TASKS:
+${tasks||"- Apply a careful standard edit."}
+
+MODE: ${cfg.mode}. ${MODE_G[cfg.mode]||""}
+INTENSITY: ${cfg.intensity}. ${INT_G[cfg.intensity]||""}`;
+  if(cfg.styleProfile&&cfg.styleStrength>0) s+=`\n\nSTYLE TARGET (influence ${cfg.styleStrength}%): reproduce these HIGHER-LEVEL traits only, never copy sentences or distinctive phrases:\n${cfg.styleProfile}`;
+  s+=`\n\nOUTPUT: Return ONLY the revised prose. Preserve paragraph breaks. No commentary, headers or markdown fences.`;
+  return s;
+}
+/* Unified model caller. Uses the artifact's window.claude.complete when
+   present (the reliable path inside Claude), otherwise a direct API fetch.
+   Throws a clear error on any failure so actions never silently do nothing. */
+function aiEditingAvailable(){
+  return (typeof window!=="undefined" && window.claude && typeof window.claude.complete==="function");
+}
+async function modelComplete(system,user,maxTokens){
+  // Preferred: artifact-native completion. Checked at call time (may inject late).
+  if(aiEditingAvailable()){
+    const prompt=(system?system+"\n\n":"")+user;
+    let out;
+    try{ out=await window.claude.complete(prompt); }
+    catch(e){ throw new Error("The AI editor could not complete this request: "+(e&&e.message||"unknown error")+". Your text is unchanged."); }
+    if(out==null || String(out).trim()==="") throw new Error("The AI editor returned an empty response. Your text is unchanged.");
+    return String(out).replace(/```[a-z]*\n?/gi,"").trim();
+  }
+  // Fallback: direct API (only where a key/proxy is configured).
+  let r;
+  try{
+    r=await fetch("https://api.anthropic.com/v1/messages",{method:"POST",headers:{"Content-Type":"application/json"},
+      body:JSON.stringify({model:"claude-sonnet-4-6",max_tokens:maxTokens||2000,system:system||"",messages:[{role:"user",content:user}]})});
+  }catch(netErr){ throw new Error("AI rewriting isn't available in this view. Open this document inside Claude (as a live artifact) to use Improve, Fix and voices. Everything else — Review, the markers, and your text — works here."); }
+  let d; try{ d=await r.json(); }catch(_){ throw new Error("The editing service returned an unreadable response."); }
+  if(!r.ok || d.error) throw new Error((d&&d.error&&d.error.message)||("Editing service error ("+r.status+")."));
+  const txt=(d.content||[]).filter(b=>b.type==="text").map(b=>b.text).join("\n").replace(/```[a-z]*\n?/gi,"").trim();
+  if(!txt) throw new Error("The editor returned an empty response. Please try again.");
+  return txt;
+}
+async function apiRewrite(text,cfg){
+  return modelComplete(buildSystem(cfg),`Revise the following. Return only the revised text.\n\n---\n${text}\n---`,4000);
+}
+async function apiStyleProfile(sample){
+  const sys="You are a style analyst. Produce a concise STYLE PROFILE of higher-level characteristics only: sentence length/variation, paragraph length, formality, directness, narrative vs analytical density, first-person use, rhetorical-question use, transition frequency, vocabulary density and abstraction, typical openings/endings, preferred punctuation, British vs American English. Never quote a distinctive phrase from the sample. Output 10-14 short bullet lines.";
+  return modelComplete(sys,sample.slice(0,12000),900);
+}
+
+/* Re-attach marks after a rewrite. Three tiers, most to least precise:
+   1) exact span survives verbatim → wrap it;
+   2) the span moved/reordered but its longest contiguous word-run survives → wrap that;
+   3) only a distinctive word (≥5 chars) survives → wrap that word.
+   A mark with no surviving home is dropped, never mis-placed. Block TYPE is
+   always carried forward separately. This is heuristic reattachment, not
+   structured-operation editing — see note in the product summary. */
+function reattachMarks(revisedText, originalRuns){
+  const marked=originalRuns.filter(r=>r.marks&&r.marks.length&&r.text.trim().length>1);
+  let runs=[{text:revisedText,marks:[]}];
+  const tryPlace=(needle,marks)=>{
+    if(!needle) return false;
+    const next=[]; let done=false;
+    for(const run of runs){
+      if(done||run.marks.length){next.push(run);continue;}
+      const idx=run.text.indexOf(needle);
+      if(idx<0){next.push(run);continue;}
+      if(idx>0) next.push({text:run.text.slice(0,idx),marks:[]});
+      next.push({text:needle,marks:[...marks]});
+      const rest=run.text.slice(idx+needle.length);
+      if(rest) next.push({text:rest,marks:[]});
+      done=true;
+    }
+    if(done) runs=next;
+    return done;
+  };
+  for(const mr of marked){
+    if(tryPlace(mr.text,mr.marks)) continue;                         // tier 1: exact
+    const words=mr.text.split(/\s+/).filter(Boolean);
+    let anchored=false;
+    for(let len=words.length;len>=2&&!anchored;len--){                // tier 2: longest run
+      for(let s=0;s+len<=words.length&&!anchored;s++){
+        anchored=tryPlace(words.slice(s,s+len).join(" "),mr.marks);
+      }
+    }
+    if(!anchored){                                                    // tier 3: key word
+      const key=words.filter(w=>w.replace(/[^a-z]/gi,"").length>=5).sort((a,b)=>b.length-a.length)[0];
+      tryPlace(key,mr.marks);
+    }
+  }
+  return runs;
+}
+
+/* ---------------------------------------------------------------------
+   D. SENTENCE-OPENING: grammatical pattern (beyond first word) (§14)
+   Detects "noun phrase + reporting verb" architecture even when the
+   first words differ: "The study found", "These findings demonstrate",
+   "This analysis suggests" all share one shape.
+   --------------------------------------------------------------------- */
+const REPORTING=new Set(["found","find","finds","demonstrate","demonstrates","demonstrated","suggest","suggests","suggested","show","shows","showed","reveal","reveals","revealed","indicate","indicates","indicated","argue","argues","argued","note","notes","noted","report","reports","reported","confirm","confirms","confirmed","highlight","highlights","highlighted","reflect","reflects","imply","implies","means","suggests"]);
+const DETERMINER=new Set(["the","this","these","those","that","a","an","our","their","its","such"]);
+function openingArchetype(sentence){
+  const toks=tokenize(sentence);
+  if(!toks.length) return "other";
+  const w0=toks[0];
+  // determiner + (adj/noun)* + reporting verb  => "reported-claim opening"
+  if(DETERMINER.has(w0)){
+    for(let i=1;i<Math.min(toks.length,5);i++){ if(REPORTING.has(toks[i])) return "np+report"; if(STOP.has(toks[i])&&i>1) break; }
+    return "np-subject";
+  }
+  if(["when","while","because","although","if","as","after","before","since","though"].includes(w0)) return "subordinate-open";
+  if(["however","moreover","furthermore","therefore","thus","consequently","additionally","ultimately"].includes(w0)) return "transition-open";
+  if(REPORTING.has(w0)) return "verb-open";
+  return "other";
+}
+function analyseArchetypes(sentences){
+  const arch=sentences.map(openingArchetype); const counts={};
+  arch.forEach(a=>counts[a]=(counts[a]||0)+1);
+  const dominant=Object.entries(counts).filter(([k,c])=>k!=="other"&&c>=3).sort((a,b)=>b[1]-a[1])[0];
+  return {arch,counts,dominant};
+}
+
+/* ---------------------------------------------------------------------
+   E. PARAGRAPH PURPOSE + SENTENCE CONTRIBUTION (§15,§16) — local heuristic
+   The definitive "what is this paragraph saying" needs the model; this
+   local pass classifies contribution so the panel is useful offline, and
+   the composer can request the model version on demand.
+   --------------------------------------------------------------------- */
+function classifyContribution(sentence, priorBags){
+  const c=concreteness(sentence);
+  const bag=contentBag(sentence);
+  // repeats a prior sentence?
+  let maxSim=0; priorBags.forEach(b=>{ if(bag.size>=3&&b.size>=3) maxSim=Math.max(maxSim,cosine(bag,b)); });
+  if(maxSim>=0.5) return {kind:"repeats",label:"repeats an earlier sentence"};
+  const lower=sentence.toLowerCase();
+  if(/^(however|moreover|furthermore|therefore|thus|in addition|consequently|that said)\b/.test(lower) && c.contentLen<8) return {kind:"transition",label:"mostly transition"};
+  if(c.concrete===0 && c.contentLen<=6 && c.abstractRatio>0.4) return {kind:"empty",label:"adds little new information"};
+  if(c.dramaHits>=1 && c.concrete===0) return {kind:"decorative",label:"atmosphere, no new fact"};
+  if(c.concrete>=2 || c.numbers>=1) return {kind:"evidence",label:"adds specific evidence"};
+  return {kind:"substantive",label:"advances the point"};
+}
+function analyseContribution(sentences){
+  const out=[]; const priorBags=[];
+  sentences.forEach(s=>{ const cls=classifyContribution(s,priorBags); out.push({sentence:s,...cls}); priorBags.push(contentBag(s)); });
+  const substantive=out.filter(o=>o.kind==="substantive"||o.kind==="evidence").length;
+  return {items:out,substantive,total:sentences.length};
+}
+
+/* ---------------------------------------------------------------------
+   F. PERSISTENCE (IndexedDB) — real autosave (§11). "Saved" is only ever
+   shown after a write resolves.
+   --------------------------------------------------------------------- */
+const DB={_db:null};
+function openDB(){
+  return new Promise((res)=>{
+    const req=indexedDB.open("humanwrite",2);
+    req.onupgradeneeded=e=>{const db=e.target.result;
+      if(!db.objectStoreNames.contains("docs")) db.createObjectStore("docs",{keyPath:"id"});
+      if(!db.objectStoreNames.contains("styles")) db.createObjectStore("styles",{keyPath:"name"});
+      if(!db.objectStoreNames.contains("meta")) db.createObjectStore("meta",{keyPath:"key"});
+      if(!db.objectStoreNames.contains("projects")) db.createObjectStore("projects",{keyPath:"id"});
+    };
+    req.onsuccess=e=>{DB._db=e.target.result;res(true);};
+    req.onerror=()=>res(false);
+  });
+}
+function idbPut(store,val){return new Promise((res,rej)=>{ if(!DB._db)return res(false); const tx=DB._db.transaction(store,"readwrite"); tx.objectStore(store).put(val); tx.oncomplete=()=>res(true); tx.onerror=()=>rej(tx.error); });}
+function idbAll(store){return new Promise((res)=>{ if(!DB._db)return res([]); const out=[]; const tx=DB._db.transaction(store,"readonly"); const c=tx.objectStore(store).openCursor(); c.onsuccess=e=>{const cur=e.target.result; if(cur){out.push(cur.value);cur.continue();}else res(out);}; c.onerror=()=>res(out); });}
+function idbGet(store,key){return new Promise((res)=>{ if(!DB._db)return res(null); const tx=DB._db.transaction(store,"readonly"); const r=tx.objectStore(store).get(key); r.onsuccess=()=>res(r.result||null); r.onerror=()=>res(null); });}
+
+/* ---------------------------------------------------------------------
+   G. APP STATE + SEAM for model calls (§12: single swap point to backend)
+   --------------------------------------------------------------------- */
+const S={
+  docId:"doc-"+Date.now(), title:"Untitled document",
+  view:"edit",              // edit | suggestions | clean
+  panel:"review",           // review | openings | ideas | style | improve
+  mode:"Academic", intensity:"Standard Edit",
+  activeStyle:null, styleStrength:50,
+  styles:[], analysis:null, suggestions:[], pending:null, // pending rewrite preview
+  savedAt:null, saving:false, saveState:"unsaved",
+  projectId:"proj-default", projectName:"My first book",
+  histBack:[], histFwd:[]        // document-level undo/redo of applied edits
+};
+// Swappable hooks the appended module overrides (declared early to avoid TDZ).
+let _improveFn=null, _compareFn=null, _docChangeCbs=[];
+function fireDocChange(){ _docChangeCbs.forEach(cb=>{try{cb();}catch(_){}}); }
+// The ONLY place the model is reached. Swap this body for fetch('/api/...') server-side.
+async function callModel(kind,payload){
+  if(kind==="rewrite") return apiRewrite(payload.text,payload.cfg);
+  if(kind==="style")   return apiStyleProfile(payload.sample);
+  if(kind==="ask")     return apiAsk(payload.system,payload.user);
+  throw new Error("unknown model call");
+}
+async function apiAsk(system,user){
+  return modelComplete(system,user,1200);
+}
+
+/* ---------------------------------------------------------------------
+   H. BLOCK-LEVEL REWRITE — the critical fix.
+   Never flatten the document. Rewrite each targeted block's TEXT, then
+   rebuild that block preserving its TYPE and re-attaching surviving marks.
+   Lists rewrite item-by-item. Returns a preview (non-destructive §20).
+   --------------------------------------------------------------------- */
+async function rewriteBlocks(targetIdxs,cfg,taskMap){
+  const blocks=parseDoc();
+  const preview=blocks.map(b=>({...b, _changed:false, _before:null}));
+  for(const idx of targetIdxs){
+    const b=blocks[idx]; if(!b) continue;
+    // per-block task list when provided, else the shared cfg.tasks
+    const blockCfg = taskMap && taskMap[idx] ? {...cfg, tasks: taskMap[idx]} : cfg;
+    if(b.type==="list"){
+      const before=JSON.parse(JSON.stringify(b));
+      const newItems=[];
+      for(const item of b.items){
+        const txt=runText(item); if(!txt.trim()){newItems.push(item);continue;}
+        const revised=await callModel("rewrite",{text:txt,cfg:blockCfg});
+        newItems.push(reattachMarks(revised.replace(/\n+/g," ").trim(),item));
+      }
+      preview[idx]={type:"list",ordered:b.ordered,items:newItems,_changed:true,_before:before};
+    } else {
+      const txt=runText(b.runs); if(!txt.trim()) continue;
+      const revised=await callModel("rewrite",{text:txt,cfg:blockCfg});
+      const cleaned=revised.replace(/\n{2,}/g," ").trim();
+      preview[idx]={type:b.type,runs:reattachMarks(cleaned,b.runs),_changed:true,_before:{type:b.type,runs:b.runs}};
+    }
+  }
+  return preview;
+}
+
+/* ---------------------------------------------------------------------
+   I. EDITOR BEHAVIOUR — toolbar, sanitized paste, floating menu
+   --------------------------------------------------------------------- */
+const TOOLBAR=[
+  {cmd:"undo",label:"↶",title:"Undo"},{cmd:"redo",label:"↷",title:"Redo"},{sep:1},
+  {block:"h1",label:"H1"},{block:"h2",label:"H2"},{block:"h3",label:"H3"},{block:"p",label:"¶",title:"Body"},{sep:1},
+  {cmd:"bold",label:"<b>B</b>",title:"Bold"},{cmd:"italic",label:"<i>I</i>",title:"Italic"},
+  {cmd:"underline",label:"<u>U</u>",title:"Underline"},{cmd:"strikeThrough",label:"<s>S</s>",title:"Strikethrough"},{sep:1},
+  {cmd:"insertUnorderedList",label:"•",title:"Bulleted list"},{cmd:"insertOrderedList",label:"1.",title:"Numbered list"},
+  {block:"blockquote",label:"❝",title:"Quote"},{cmd:"createLink",label:"↗",title:"Link"},{sep:1},
+  {cmd:"outdent",label:"⇤"},{cmd:"indent",label:"⇥"},{cmd:"removeFormat",label:"⌫",title:"Clear formatting"}
+];
+function buildToolbar(){
+  const el=$("#toolbar"); el.innerHTML="";
+  TOOLBAR.forEach(t=>{
+    if(t.sep){const d=document.createElement("div");d.className="tb-sep";el.appendChild(d);return;}
+    const b=document.createElement("button"); b.className="tb"+(t.block?" wide":""); b.innerHTML=t.label; if(t.title)b.title=t.title;
+    b.onmousedown=e=>{e.preventDefault();
+      editor.focus();
+      if(t.block){ document.execCommand("formatBlock",false, t.block==="p"?"P":t.block.toUpperCase()); }
+      else if(t.cmd==="createLink"){ const u=prompt("Link URL"); if(u) document.execCommand("createLink",false,u); }
+      else document.execCommand(t.cmd,false,null);
+      onEdit();
+    };
+    el.appendChild(b);
+  });
+}
+// sanitized structured paste (§65) — keep headings/bold/italic/lists/links only
+editor.addEventListener("paste",e=>{
+  e.preventDefault();
+  const html=e.clipboardData.getData("text/html");
+  const plain=e.clipboardData.getData("text/plain");
+  let frag;
+  if(html && window.DOMPurify){
+    const clean=DOMPurify.sanitize(html,{ALLOWED_TAGS:["p","h1","h2","h3","strong","b","em","i","u","s","ul","ol","li","blockquote","a","br"],ALLOWED_ATTR:["href"]});
+    frag=clean;
+  } else {
+    frag=plain.split(/\n{2,}/).map(p=>`<p>${p.replace(/</g,"&lt;")}</p>`).join("");
+  }
+  document.execCommand("insertHTML",false,frag);
+  onEdit();
+});
+// floating quick-edit menu on selection (§70)
+const FLOAT_ACTIONS=[["fixOpenings","Fix openings"],["removeRepetition","Fix repetition"],["clarify","Make clearer"],["tighten","Tighten"],["removeStorytelling","Remove empty"],["__style","Change style"]];
+function positionFloating(){
+  const sel=window.getSelection(); const fl=$("#floating");
+  if(!sel.rangeCount||sel.isCollapsed||!editor.contains(sel.anchorNode)){ fl.style.display="none"; return; }
+  const rect=sel.getRangeAt(0).getBoundingClientRect(); if(!rect.width){fl.style.display="none";return;}
+  fl.innerHTML=""; FLOAT_ACTIONS.forEach(([id,label])=>{const b=document.createElement("button");b.textContent=label;b.onmousedown=ev=>{ev.preventDefault(); id==="__style"?openStyleMenu():runComposer(TASK_PROMPTS[id]?[id]:[],"selection");};fl.appendChild(b);});
+  fl.style.display="flex";
+  fl.style.top=(window.scrollY+rect.top-46)+"px";
+  fl.style.left=(window.scrollX+Math.max(12,rect.left))+"px";
+}
+document.addEventListener("selectionchange",()=>{ if(S.view==="edit") positionFloating(); });
+
+/* ---------------------------------------------------------------------
+   J. MODE BAR (three document views) + primary controls
+   Editorial vocabulary (§brand): Analyse->Editorial Review, etc.
+   --------------------------------------------------------------------- */
+function buildModeBar(){
+  const el=$("#modebar"); el.innerHTML="";
+  const views=[["edit","Write"],["suggestions","Review"],["clean","Read"]];
+  views.forEach(([id,label])=>{const b=document.createElement("button");b.textContent=label;b.className=S.view===id?"on":"";b.onclick=()=>{ if(id==="suggestions"&&!S.analysis){runAnalysis();} setView(id); };el.appendChild(b);});
+  const spacer=document.createElement("div"); spacer.style.flex="1"; el.appendChild(spacer);
+  // Style selector (quiet, secondary)
+  el.appendChild(dropdown((S.activeStyle?S.activeStyle.name:"Original voice")+" ▾",null,null,true));
+  // ONE primary action.
+  const improve=document.createElement("button"); improve.textContent="Improve"; improve.style.cssText="color:#fff;background:var(--accent);border-radius:8px;margin:6px 4px 6px 8px;border-bottom:none;font-weight:600;padding:0 16px";
+  improve.onclick=()=>(_improveFn||improveDocument)(); el.appendChild(improve);
+}
+function dropdown(label,items,onPick,isStyle){
+  const wrap=document.createElement("div"); wrap.style.position="relative";
+  const b=document.createElement("button"); b.textContent=label; wrap.appendChild(b);
+  const menu=document.createElement("div"); menu.style.cssText="position:absolute;top:100%;right:0;background:#fff;border:1px solid var(--line);border-radius:8px;box-shadow:0 8px 24px rgba(0,0,0,.12);min-width:210px;display:none;z-index:30;padding:5px;font-size:13px";
+  wrap.appendChild(menu);
+  const rebuild=()=>{
+    menu.innerHTML="";
+    const list = isStyle ? [["Original",null],["My Voice","My Voice"],...S.styles.map(s=>[s.name,s.name]),["divider",null],["Compare voices…","__compare"],["Create style…","__create"]] : items;
+    list.forEach(([txt,val])=>{
+      if(val===null && (txt==="Recommended"||txt==="Advanced"||txt==="divider")){ const h=document.createElement("div"); h.textContent=txt==="divider"?"":txt; h.style.cssText="font-family:var(--sans);font-size:10px;text-transform:uppercase;letter-spacing:.05em;color:var(--muted);padding:6px 8px 3px"; menu.appendChild(h); return; }
+      const it=document.createElement("div"); it.textContent=txt; it.style.cssText="font-family:var(--sans);padding:7px 9px;border-radius:6px;cursor:pointer";
+      it.onmouseenter=()=>it.style.background="var(--accent-soft)"; it.onmouseleave=()=>it.style.background="";
+      it.onclick=()=>{menu.style.display="none"; if(isStyle){ if(val==="__create") openCreateStyle(); else if(val==="__compare"){ if(_compareFn)_compareFn(); } else { S.activeStyle=(val&&val!=="Original")?(S.styles.find(s=>s.name===val)||{name:val,profile:""}):null; buildModeBar(); persistMeta(); toast(val&&val!=="Original"?("Voice: "+val):"Original voice"); } } else onPick(val); };
+      menu.appendChild(it);
+    });
+  };
+  b.onclick=()=>{ document.querySelectorAll(".hw-menu-open").forEach(m=>{if(m!==menu)m.style.display="none";}); rebuild(); menu.classList.add("hw-menu-open"); menu.style.display=menu.style.display==="block"?"none":"block"; };
+  document.addEventListener("click",e=>{ if(!wrap.contains(e.target)) menu.style.display="none"; });
+  return wrap;
+}
+function openStyleMenu(){ toast("Open Style ▾ in the top bar to choose or create a voice."); }
+
+/* Grounded Fix panel — diagnoses first, cites the principle, points at the
+   evidence in the writer's own text, then offers scoped, previewed application. */
+function openFixPanel(){
+  if(!S.analysis) runAnalysis();
+  const sug=buildFixSuggestions(S.analysis);
+  const m=document.createElement("div"); m.style.cssText="position:fixed;inset:0;background:rgba(37,34,41,.42);display:flex;align-items:center;justify-content:center;z-index:100";
+  const section=(title,items)=>`<div style="font-size:10px;text-transform:uppercase;letter-spacing:.06em;color:var(--muted);margin:14px 0 6px">${title}</div>`+
+    items.map(s=>{
+      const dim=!s.found;
+      const ev=s.found?`<ul style="margin:6px 0 0;padding-left:18px;color:var(--ink);font-size:12.5px;line-height:1.5">${s.evidence.map(e=>`<li>${escapeHTML(e)}</li>`).join("")}</ul>`
+                      :`<div style="font-size:12px;color:var(--sage);margin-top:4px">Nothing of this kind found. No change needed.</div>`;
+      return `<div class="fixrow" data-fix="${s.id}" style="border:1px solid var(--line);border-radius:10px;padding:12px 14px;margin-bottom:8px;${dim?'opacity:.62':''}">
+        <div style="display:flex;justify-content:space-between;align-items:baseline;gap:10px">
+          <div style="font-weight:600;font-size:14px">${s.title}</div>
+          ${s.found?`<button class="btn primary" data-apply="${s.id}" style="font-size:12px;flex:none">Fix this →</button>`:''}
+        </div>
+        <div style="font-size:12.5px;color:var(--muted);margin-top:3px;font-style:italic">${escapeHTML(s.principle)}</div>
+        <div style="font-size:11px;color:var(--accent);margin-top:2px">${escapeHTML(s.source)}</div>
+        ${ev}
+      </div>`;
+    }).join("");
+  m.innerHTML=`<div style="background:#fff;border-radius:14px;padding:22px;width:min(600px,94vw);max-height:88vh;overflow:auto;font-family:var(--sans)">
+    <div style="font-size:17px;font-weight:700">What to fix</div>
+    <div style="font-size:12.5px;color:var(--muted);margin-bottom:4px">Grounded in established editorial principles. Each suggestion points at the specific place in your text.</div>
+    <div style="font-size:11px;color:var(--muted);margin-bottom:6px">Applies to the paragraph at your cursor unless you choose the whole document.</div>
+    <label style="font-size:12px;display:flex;align-items:center;gap:6px;margin-bottom:4px"><input type="checkbox" id="fixWhole"> Apply to the whole document</label>
+    ${section("Recommended",sug.recommended)}
+    ${section("Advanced",sug.advanced)}
+    <div style="text-align:right;margin-top:12px"><button class="btn" id="fixClose">Close</button></div></div>`;
+  document.body.appendChild(m);
+  m.querySelector("#fixClose").onclick=()=>m.remove();
+  m.querySelectorAll("[data-apply]").forEach(b=>b.onclick=()=>{
+    const id=b.dataset.apply; const whole=m.querySelector("#fixWhole").checked;
+    m.remove(); runComposer([id,"preserveVoice"],whole?"document":"block");
+  });
+}
+
+/* ---------------------------------------------------------------------
+   K. VIEWS
+   --------------------------------------------------------------------- */
+function setView(v){
+  S.view=v; buildModeBar();
+  if(v==="suggestions") openPanel();
+  editor.setAttribute("contenteditable", v==="edit"?"true":"false");
+  clearInlineMarks();
+  if(v==="suggestions"){ if(!S.analysis) runAnalysis(); decorateInline(); }
+  $("#floating").style.display="none";
+  renderRight();
+}
+
+/* ---------------------------------------------------------------------
+   L. INLINE SUGGESTIONS inside the document (§6 of review)
+   Confidence layer + restrained editorial voice. Underlines only; hover
+   card offers scoped actions. Marks are decoration, removed before parse.
+   --------------------------------------------------------------------- */
+function clearInlineMarks(){
+  editor.querySelectorAll(".hw-mark").forEach(m=>{ const t=document.createTextNode(m.textContent); m.replaceWith(t); });
+  editor.normalize();
+  const card=$("#hoverCard"); if(card) card.style.display="none";
+}
+function firstTextRangeInBlock(blockEl, phrase){
+  // find phrase within a block element's text and return a Range
+  const walker=document.createTreeWalker(blockEl,NodeFilter.SHOW_TEXT);
+  let node, offsetAcc=0, full="";
+  const nodes=[]; while((node=walker.nextNode())){ nodes.push([node,full.length]); full+=node.nodeValue; }
+  const at=full.indexOf(phrase); if(at<0) return null;
+  const end=at+phrase.length; let range=document.createRange(), startSet=false;
+  for(const [n,base] of nodes){
+    const nEnd=base+n.nodeValue.length;
+    if(!startSet && at>=base && at<nEnd){ range.setStart(n,at-base); startSet=true; }
+    if(startSet && end>base && end<=nEnd){ range.setEnd(n,end-base); return range; }
+  }
+  return null;
+}
+/* Persistent ignored suggestions (§15). Fingerprint = docId|block|type|texthash.
+   Skipped on future decoration unless the underlying text materially changes. */
+let IGNORED=new Set();
+function _hash(s){ let h=0; for(let i=0;i<s.length;i++){ h=((h<<5)-h+s.charCodeAt(i))|0; } return h>>>0; }
+function fingerprint(payload,text){ return `${S.docId}|${payload.idx}|${payload.type}|${_hash((text||"").slice(0,60))}`; }
+function ignoreSuggestion(payload,text){ IGNORED.add(fingerprint(payload,text)); persistIgnored(); }
+async function persistIgnored(){ try{ await idbPut("meta",{key:"ignored",list:[...IGNORED]}); }catch(_){} }
+async function loadIgnored(){ try{ const r=await idbGet("meta","ignored"); if(r&&r.list) IGNORED=new Set(r.list); }catch(_){} }
+
+function wrapRange(range,cls,payload){
+  // honour persistent ignores
+  const text=range.toString?range.toString():"";
+  if(IGNORED.has(fingerprint(payload,text))) return false;
+  try{ const span=document.createElement("span"); span.className="hw-mark "+cls; span.dataset.k=JSON.stringify(payload); range.surroundContents(span);
+    span.addEventListener("mouseenter",()=>showHover(span)); return true; }catch(_){ return false; }
+}
+function decorateInline(){
+  if(!S.analysis) return;
+  clearInlineMarks();
+  const blockEls=[...editor.children];
+  S.analysis.perPara.forEach(p=>{
+    const el=blockEls[p.index]; if(!el) return;
+    // repeated "This" openings -> gold/violet dashed on the leading word
+    if(p.openings.thisCount>=3){ /* handled at sentence level below */ }
+    // sentence-level: opening repetition on first word of repeating sentences
+    if(p.openings.diversity!=="High"){
+      const topWord=(p.openings.repeatedWord[0]||[])[0];
+      let done=0;
+      p.sentences.forEach(s=>{ if(done>=3)return; if(openingSig(s).firstWord===topWord){ const first=s.split(/\s+/)[0]; const r=firstTextRangeInBlock(el,first); if(r){ wrapRange(r,"OPEN",{type:"Repeated opening",conf:"Strong signal",body:`"${topWord}" begins ${p.openings.repeatedWord[0][1]} sentences in this paragraph.`,tasks:["fixOpenings"],idx:p.index}); done++; } } });
+    }
+    // empty storytelling
+    p.emptiness.story.forEach(st=>{ const r=firstTextRangeInBlock(el,st.sentence.trim().slice(0,80)); if(r) wrapRange(r,"STORY",{type:"Empty storytelling",conf:"Possible issue",body:"This creates atmosphere but no concrete event, observation or claim yet.",tasks:["removeStorytelling"],idx:p.index}); });
+    // low-information
+    p.emptiness.empty.forEach(em=>{ const r=firstTextRangeInBlock(el,em.sentence.trim().slice(0,80)); if(r) wrapRange(r,"EMPTY",{type:"Sentence adding little",conf:"Possible issue",body:"This sentence does not currently identify the specifics it gestures at.",tasks:["removeEmpty"],idx:p.index}); });
+  });
+  // conceptual repetition: mark second occurrence
+  S.analysis.conceptual.slice(0,4).forEach(c=>{
+    const el=blockEls[c.b.ref]; if(!el)return; const r=firstTextRangeInBlock(el,c.b.text.trim().slice(0,80));
+    if(r) wrapRange(r,"REP",{type:"Repeated idea",conf:c.sim>=0.55?"Strong signal":"Editorial judgement required",body:`This appears to restate a point made earlier (≈${Math.round(c.sim*100)}% overlap).`,tasks:["removeRepetition"],idx:c.b.ref});
+  });
+  ensureHoverCard();
+}
+function ensureHoverCard(){
+  if($("#hoverCard")) return;
+  const c=document.createElement("div"); c.id="hoverCard";
+  c.style.cssText="position:absolute;display:none;z-index:50;background:#fff;border:1px solid var(--line);border-radius:10px;box-shadow:0 10px 30px rgba(0,0,0,.14);padding:12px 14px;max-width:300px;font-family:var(--sans);font-size:13px";
+  document.body.appendChild(c);
+}
+function showHover(span){
+  const p=JSON.parse(span.dataset.k); const c=$("#hoverCard"); if(!c)return;
+  const confColour=p.conf==="Strong signal"?"var(--accent)":p.conf==="Possible issue"?"var(--gold)":"var(--muted)";
+  c.innerHTML=`<div style="font-weight:600;margin-bottom:2px">${p.type}</div>
+    <div style="font-size:11px;color:${confColour};margin-bottom:6px">${p.conf}</div>
+    <div style="color:var(--ink);line-height:1.5;margin-bottom:9px">${p.body}</div>
+    <div style="display:flex;gap:6px"></div>`;
+  const row=c.querySelector("div:last-child");
+  const mk=(t,fn)=>{const b=document.createElement("button");b.textContent=t;b.className="btn";b.style.fontSize="12px";b.onclick=fn;return b;};
+  row.appendChild(mk("Fix",()=>{c.style.display="none";runComposer(p.tasks,"block",p.idx);}));
+  row.appendChild(mk("Ignore",()=>{c.style.display="none";span.classList.remove("OPEN","STORY","EMPTY","REP","FORM","THIS");ignoreSuggestion(p,span.textContent);}));
+  const rect=span.getBoundingClientRect();
+  c.style.display="block";
+  c.style.top=(window.scrollY+rect.bottom+6)+"px";
+  c.style.left=(window.scrollX+Math.min(rect.left,window.innerWidth-320))+"px";
+  const hide=e=>{ if(!c.contains(e.target)&&e.target!==span){c.style.display="none";document.removeEventListener("mousemove",softHide);} };
+  let t; const softHide=()=>{ clearTimeout(t); t=setTimeout(()=>{ if(!c.matches(":hover")&&!span.matches(":hover")) c.style.display="none"; },600); };
+  document.addEventListener("mousemove",softHide,{once:true});
+}
+
+/* ---------------------------------------------------------------------
+   M. COMPOSER + REWRITE ORCHESTRATION (non-destructive preview §20)
+   --------------------------------------------------------------------- */
+function currentBlockIndex(){
+  const sel=window.getSelection(); if(!sel.rangeCount) return null;
+  let n=sel.anchorNode; while(n&&n.parentNode!==editor) n=n.parentNode;
+  if(!n) return null; return [...editor.children].indexOf(n);
+}
+async function runComposer(tasks,scope,forcedIdx){
+  if(!tasks||!tasks.length){ toast("Choose what to improve."); return; }
+  let idxs=[];
+  const blocks=parseDoc();
+  if(scope==="document") idxs=blocks.map((_,i)=>i);
+  else if(scope==="block") idxs=[forcedIdx!=null?forcedIdx:currentBlockIndex()].filter(i=>i!=null&&i>=0);
+  else { const ci=currentBlockIndex(); idxs=[ci!=null&&ci>=0?ci:0]; }
+  if(!idxs.length){ toast("Place the cursor in a paragraph first."); return; }
+  const cfg={tasks,mode:S.mode,intensity:S.intensity,styleProfile:S.activeStyle?S.activeStyle.profile:"",styleStrength:S.activeStyle?S.styleStrength:0};
+  setBusy(true,humanStatus(tasks));
+  try{
+    const preview=await rewriteBlocks(idxs,cfg);
+    S.pending={preview,idxs}; renderPreview(preview); setView("suggestions");
+  }catch(e){ showErr(friendlyError(e)); }
+  finally{ setBusy(false); }
+}
+function humanStatus(tasks){
+  if(tasks.includes("removeRepetition"))return "Reviewing repetition…";
+  if(tasks.includes("fixOpenings"))return "Reviewing sentence openings…";
+  if(tasks.includes("removeStorytelling")||tasks.includes("removeEmpty"))return "Reviewing low-information passages…";
+  return "Editing…";
+}
+function friendlyError(e){
+  const m=(e&&e.message)||"";
+  if(/AI rewriting isn't available|AI editor|not available in this view/i.test(m)) return m; // already clear
+  if(/429|rate/i.test(m)) return "The editor is briefly rate-limited. Wait a moment and try again.";
+  if(/network|fetch|Failed/i.test(m)) return "AI rewriting isn't available in this view. Open this document inside Claude to use Improve, Fix and voices. Review, markers and your text all work here.";
+  if(/max_tokens|length|large/i.test(m)) return "This passage is long. Try editing a section or paragraph at a time.";
+  return "The edit could not complete. "+m;
+}
+async function improveDocument(){
+  // Improve = analyse first, then edit ONLY problem blocks, each with ITS OWN tasks.
+  runAnalysis();
+  const problem=S.analysis.perPara.filter(p=>p.health!=="Strong").map(p=>p.index);
+  if(!problem.length){ setView("suggestions"); toast("No structural problems detected. Nothing to change."); return; }
+  const taskMap={};
+  problem.forEach(idx=>{ taskMap[idx]=recommendedTasksFor(idx); });
+  const cfg={tasks:["preserveVoice"],mode:S.mode,intensity:"Standard Edit",styleProfile:S.activeStyle?S.activeStyle.profile:"",styleStrength:S.activeStyle?S.styleStrength:0};
+  setBusy(true,"Reviewing the manuscript…");
+  try{ const preview=await rewriteBlocks(problem,cfg,taskMap); S.pending={preview,idxs:problem}; renderPreview(preview); setView("suggestions"); toast(problem.length+" paragraph(s) marked for attention."); }
+  catch(e){ showErr(friendlyError(e)); }
+  finally{ setBusy(false); }
+}
+function renderPreview(preview){
+  S.panel="improve"; renderRight();
+}
+function pushHistory(){ S.histBack.push(editor.innerHTML); if(S.histBack.length>50)S.histBack.shift(); S.histFwd=[]; updateHistBtns(); }
+function updateHistBtns(){ const b=$("#btnBack"),f=$("#btnFwd"); if(b)b.disabled=!S.histBack.length; if(f)f.disabled=!S.histFwd.length; }
+function goBack(){ if(!S.histBack.length)return; S.histFwd.push(editor.innerHTML); editor.innerHTML=S.histBack.pop(); onEdit(); runAnalysis(); updateHistBtns(); toast("Reverted the last change."); }
+function goForward(){ if(!S.histFwd.length)return; S.histBack.push(editor.innerHTML); editor.innerHTML=S.histFwd.pop(); onEdit(); runAnalysis(); updateHistBtns(); toast("Change reapplied."); }
+
+function acceptPreview(){
+  if(!S.pending) return;
+  pushHistory();
+  snapshotVersion("Before edit");
+  renderDoc(S.pending.preview.map(b=>({type:b.type,ordered:b.ordered,runs:b.runs,items:b.items})));
+  S.pending=null; onEdit(); runAnalysis(); setView("suggestions"); toast("Edits applied. Use Back to undo.");
+}
+function rejectPreview(){ S.pending=null; renderRight(); toast("Kept the original."); }
+
+/* ---------------------------------------------------------------------
+   N. ANALYSIS + RIGHT PANEL
+   --------------------------------------------------------------------- */
+function runAnalysis(){ S.analysis=analyseDocument(parseDoc()); renderRight(); renderOutline(); if(S.view==="suggestions") decorateInline(); }
+
+function pillClass(v){return v.replace(/\s+/g,"");}
+function openPanel(){ const g=$("#bodyGrid"); if(g)g.classList.remove("panel-collapsed"); }
+function collapsePanel(){ const g=$("#bodyGrid"); if(g)g.classList.add("panel-collapsed"); }
+function renderRight(){
+  const el=$("#rightPanel"); if(!el) return;
+  if(S.pending){ el.innerHTML=previewHTML(S.pending.preview); wirePreview(); return; }
+  // header: title + close
+  let html=`<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:12px">
+    <div style="font-family:var(--sans);font-weight:700;font-size:14px">Review</div>
+    <button class="btn" id="panelClose" style="padding:3px 9px">Hide ›</button></div>`;
+  if(!S.analysis){ html+=`<div class="muted" style="font-family:var(--sans);font-size:13px">Nothing reviewed yet. Press <b>Review</b> at the top to examine your manuscript.</div>`; el.innerHTML=html; wireClose(); return; }
+  if(S.panel==="wi"){ html+=`<button class="btn" data-back-review style="margin-bottom:10px">‹ Back to review</button>`+wiHTML(); el.innerHTML=html; wireClose(); wireWI(); $$("#rightPanel [data-back-review]").forEach(b=>b.onclick=()=>{S.panel="review";renderRight();}); return; }
+  if(S.panel==="ideas"){ html+=`<button class="btn" data-back-review style="margin-bottom:10px">‹ Back to review</button>`+ideasHTML(); el.innerHTML=html; wireClose(); wirePanel(); $$("#rightPanel [data-back-review]").forEach(b=>b.onclick=()=>{S.panel="review";renderRight();}); return; }
+  // default: the single review surface
+  html+=reviewHTML();
+  // quiet footer: secondary views, one line, not competing tabs
+  html+=`<div style="margin-top:14px;padding-top:12px;border-top:1px solid var(--line);font-family:var(--sans);font-size:12.5px;display:flex;gap:14px;flex-wrap:wrap">
+    <a href="#" data-gopanel="ideas" style="color:var(--accent);text-decoration:none">Repeated ideas</a>
+    <a href="#" data-gopanel="style" style="color:var(--accent);text-decoration:none">Style &amp; voice</a>
+    <a href="#" data-gopanel="wi" style="color:var(--muted);text-decoration:none">Learn</a></div>`;
+  if(S.panel==="style"){ html=`<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:12px"><div style="font-family:var(--sans);font-weight:700;font-size:14px">Style &amp; voice</div><button class="btn" id="panelClose" style="padding:3px 9px">Hide ›</button></div><button class="btn" data-back-review style="margin-bottom:10px">‹ Back to review</button>`+styleHTML(); }
+  el.innerHTML=html; wireClose(); wirePanel();
+  $$("#rightPanel [data-gopanel]").forEach(a=>a.onclick=e=>{e.preventDefault();S.panel=a.dataset.gopanel;renderRight();});
+  $$("#rightPanel [data-back-review]").forEach(b=>b.onclick=()=>{S.panel="review";renderRight();});
+}
+function wireClose(){ const c=$("#panelClose"); if(c)c.onclick=()=>collapsePanel(); }
+function reviewHTML(){
+  const a=S.analysis, ind=a.indicators;
+  const label={formulaicRisk:"Formulaic writing",openingRepetition:"Sentence-opening repetition",emptyStorytelling:"Empty storytelling",lowInformation:"Sentences adding little",conceptualRepetition:"Repeated ideas",wordiness:"Wordiness"};
+  let h=`<div class="card"><div class="h">Editorial indicators</div><div class="indic">`;
+  Object.keys(label).forEach(k=>{h+=`<span>${label[k]}</span><span style="text-align:right"><span class="pill ${pillClass(ind[k])}">${ind[k]}</span></span>`;});
+  h+=`</div><div class="note">Editorial indicators, not a measurement of human authorship.</div>
+    <button class="btn primary full" data-openfix style="margin-top:10px">Suggest fixes for the whole document</button></div>`;
+  a.perPara.forEach(p=>{
+    const cls=pillClass(p.health);
+    h+=`<div class="card"><div class="para-head" data-goto="${p.index}"><span>Paragraph ${p.index+1} <span class="muted" style="font-weight:400">· ${p.sentences.length} sentences</span></span><span class="pill ${cls}">${p.health}</span></div>`;
+    const flags=[];
+    if(p.openings.diversity!=="High"){const rw=p.openings.repeatedWord.filter(([,c])=>c>=2).map(([w,c])=>`"${w}" begins ${c}`).join("; ");
+      const arc=analyseArchetypes(p.sentences); const arcNote=arc.dominant?` ${arc.dominant[1]} of ${p.sentences.length} sentences share one grammatical shape (${archName(arc.dominant[0])}).`:"";
+      flags.push(`<div class="flag"><span class="tag OPEN">OPEN</span>${rw||"repeated openings"}.${arcNote}</div>`);}
+    p.emptiness.story.forEach(()=>flags.push(`<div class="flag"><span class="tag STORY">STORY</span>Atmosphere without a concrete event or claim.</div>`));
+    p.emptiness.empty.forEach(()=>flags.push(`<div class="flag"><span class="tag EMPTY">EMPTY</span>A sentence that gestures without specifics.</div>`));
+    if(p.formulaic.length)flags.push(`<div class="flag"><span class="tag FORM">FORM</span>${p.formulaic.map(f=>`"${f.phrase}"`).join(", ")}.</div>`);
+    if(p.lexical.words.length)flags.push(`<div class="flag"><span class="tag REP">REP</span>${p.lexical.words.map(w=>w.word+" ×"+w.count).join(", ")}.</div>`);
+    if(!flags.length)flags.push(`<div class="flag" style="color:var(--sage)">Specific and clear. No edit recommended.</div>`);
+    h+=flags.join("")+`<div class="btnrow" style="margin-top:8px"><button class="btn" data-purpose="${p.index}">What is this saying?</button>`;
+    if(p.health!=="Strong")h+=`<button class="btn primary" data-fixpara="${p.index}">Improve paragraph</button>`;
+    h+=`</div><div class="purpose" id="purpose-${p.index}"></div></div>`;
+  });
+  return h;
+}
+function archName(k){return {"np+report":"noun phrase + reporting verb","np-subject":"noun-phrase subject","subordinate-open":"subordinate clause","transition-open":"transition word","verb-open":"leading verb"}[k]||k;}
+function openingsHTML(){
+  let h=`<div class="note" style="margin-bottom:10px">First word of each sentence. Repeated openings share a colour; grammatical shape is noted below.</div>`;
+  S.analysis.perPara.forEach(p=>{
+    const counts={}; p.openings.sigs.forEach(s=>counts[s.firstWord]=(counts[s.firstWord]||0)+1);
+    const pal=["#5B3A70","#A77B39","#A7554C","#657A67","#76528F"]; const cmap={}; let ci=0;
+    Object.entries(counts).filter(([,c])=>c>=2).forEach(([w])=>cmap[w]=pal[ci++%pal.length]);
+    const arc=analyseArchetypes(p.sentences);
+    h+=`<div class="card"><div class="para-head" data-goto="${p.index}"><span>Paragraph ${p.index+1}</span><span class="pill ${pillClass(p.openings.diversity==='High'?'Strong':p.openings.diversity)}">${p.openings.diversity==='High'?'Varied':p.openings.diversity}</span></div><div class="opmap">`;
+    p.openings.sigs.forEach((s,i)=>{const col=cmap[s.firstWord];h+=`<div><span class="muted">S${i+1}:</span> <span class="op-chip" style="${col?`background:${col}22;color:${col};font-weight:700`:''}">${(p.sentences[i]||"").split(/\s+/).slice(0,4).join(" ")}…</span></div>`;});
+    h+=`</div>`;
+    if(arc.dominant)h+=`<div class="flag" style="margin-top:6px"><span class="tag OPEN">SHAPE</span>${arc.dominant[1]} of ${p.sentences.length} sentences: ${archName(arc.dominant[0])}.</div>`;
+    if(p.openings.diversity!=="High")h+=`<button class="btn" data-fixpara="${p.index}" style="margin-top:6px">Fix these openings</button>`;
+    h+=`</div>`;
+  });
+  return h;
+}
+function ideasHTML(){
+  const cc=S.analysis.conceptual;
+  if(!cc.length)return `<div class="muted" style="font-family:var(--sans);font-size:13px">No repeated ideas detected. Recurrences below a conservative threshold are left for you to judge.</div>`;
+  let h=`<div class="note" style="margin-bottom:10px">Passages that may be making the same point. Repetition is classified by what it does, not merely that it recurs.</div>`;
+  cc.forEach(c=>{const conf=c.sim>=0.55?"Strong signal":"Editorial judgement required";
+    const kind=classifyRepetitionKind({isTechnical:false,isSentenceStart:false,count:2,acrossParagraphs:c.a.ref!==c.b.ref});
+    const kindNote=WI_REPETITION_TYPES[kind]||"";
+    h+=`<div class="card"><div style="font-family:var(--sans);font-size:11px;color:${c.sim>=0.55?'var(--accent)':'var(--muted)'};margin-bottom:6px">${conf} · paras ${c.a.ref+1} ↔ ${c.b.ref+1} · ≈${Math.round(c.sim*100)}% overlap</div>
+      <div style="font-family:var(--sans);font-size:11.5px;color:var(--accent);margin-bottom:6px">Likely: ${kind.replace(/-/g," ")} — ${kindNote}</div>
+      <div class="muted" style="font-size:13px;margin-bottom:4px">"${c.a.text}"</div><div class="muted" style="font-size:13px">"${c.b.text}"</div>
+      <div class="btnrow" style="margin-top:8px"><button class="btn primary" data-merge="${c.b.ref}">Merge</button><button class="btn" data-goto="${c.b.ref}">Compare</button></div></div>`;});
+  return h;
+}
+
+function styleHTML(){
+  let h=`<div class="card"><div class="h">Active voice</div><div style="font-family:var(--sans);font-size:13px">${S.activeStyle?S.activeStyle.name:"Original"}</div>`;
+  if(S.activeStyle&&S.activeStyle.profile)h+=`<div class="note" style="white-space:pre-wrap;font-style:normal;color:var(--ink);margin-top:8px;background:var(--panel);padding:10px;border-radius:8px">${S.activeStyle.profile}</div>
+    <div style="margin-top:10px;font-family:var(--sans);font-size:12px;color:var(--muted)">Influence ${S.styleStrength}%</div><input type="range" class="rng" min="0" max="100" step="25" value="${S.styleStrength}" data-strength>`;
+  h+=`</div><div class="card"><div class="h">Style library</div>`;
+  if(!S.styles.length)h+=`<div class="muted" style="font-family:var(--sans);font-size:13px;margin-bottom:8px">No saved voices yet.</div>`;
+  else S.styles.forEach(s=>{h+=`<div style="display:flex;justify-content:space-between;align-items:center;font-family:var(--sans);font-size:13px;padding:4px 0"><span>${s.name} <span class="muted">· ${s.samples||1} sample(s)</span></span><button class="btn" data-usestyle="${s.name}">Use</button></div>`;});
+  h+=`<button class="btn primary full" data-createstyle style="margin-top:8px">Create a voice</button></div>`;
+  return h;
+}
+
+/* Writing Intelligence panel — function categories, principle library, and the
+   honest provenance registry. No author names appear as selectable voices. */
+let _wiView="categories";
+function wiHTML(){
+  const cs=wiCorpusStatus();
+  let h=`<div class="card" style="background:var(--accent-soft);border-color:transparent">
+    <div style="font-family:var(--sans);font-size:12.5px;line-height:1.55;color:var(--ink)">HumanWrite doesn't teach you to sound like a named author. It learns what strong writing <i>does</i>, then helps you achieve those qualities in your own voice.</div></div>`;
+  h+=`<div class="rtabs" style="margin-bottom:10px">
+    <button class="${_wiView==="categories"?"on":""}" data-wi="categories">Categories</button>
+    <button class="${_wiView==="principles"?"on":""}" data-wi="principles">Principles</button>
+    <button class="${_wiView==="sources"?"on":""}" data-wi="sources">Provenance</button></div>`;
+  if(_wiView==="categories"){
+    WI_CATEGORIES.forEach(g=>{
+      h+=`<div class="card"><div class="h">${g.group}</div><div style="display:flex;flex-wrap:wrap;gap:6px">`+
+        g.items.map(it=>`<span class="pill" style="background:var(--panel);color:var(--ink);cursor:default">${it}</span>`).join("")+`</div></div>`;
+    });
+    h+=`<div class="note">These describe what writing is trying to do. They are functions, not authors — you will never see “write like [person].”</div>`;
+  } else if(_wiView==="principles"){
+    WI_PRINCIPLES.forEach(p=>{
+      h+=`<div class="card"><div style="font-weight:600;font-size:13.5px;font-family:var(--sans)">${p.principle}</div>
+        <div style="font-family:var(--sans);font-size:12px;color:var(--accent);margin-top:5px">Applies to: ${p.appliesTo.join(", ")}</div>
+        <div style="font-family:var(--sans);font-size:12.5px;color:var(--muted);margin-top:6px"><b style="color:var(--terra)">When it goes wrong:</b> ${p.weak}</div>
+        <div style="font-family:var(--sans);font-size:12.5px;color:var(--muted);margin-top:4px"><b style="color:var(--accent)">Editorial response:</b> ${p.response}</div>
+        <div style="font-family:var(--sans);font-size:12.5px;color:var(--muted);margin-top:4px"><b style="color:var(--sage)">Never:</b> ${p.doNot}</div></div>`;
+    });
+  } else {
+    h+=`<div class="card"><div class="h">Corpus status</div>
+      <div style="font-family:var(--sans);font-size:13px;line-height:1.7">
+        ${cs.total} sources catalogued · <b style="color:var(--terra)">${cs.ingested} texts ingested</b><br>
+        <span class="muted" style="font-size:12px">No exemplar text has been retrieved or stored: the source repositories are not reachable from this build. The registry and rights model are ready; the corpus is honestly empty of retrieved text.</span>
+      </div></div>`;
+    h+=`<div class="card"><div class="h">Rights key</div><div style="font-family:var(--sans);font-size:12px;line-height:1.7">`+
+      Object.entries(WI_RIGHTS).map(([k,v])=>`<div><b style="color:${k==="GREEN"?"var(--sage)":k==="RED"?"var(--terra)":k==="AMBER"?"var(--gold)":"var(--accent)"}">${k}</b> — ${v.label}</div>`).join("")+`</div></div>`;
+    WI_SOURCES.forEach(s=>{
+      const col=s.rights==="GREEN"?"var(--sage)":s.rights==="RED"?"var(--terra)":s.rights==="AMBER"?"var(--gold)":"var(--accent)";
+      h+=`<div class="card" style="padding:11px 13px"><div style="display:flex;justify-content:space-between;align-items:baseline;gap:8px">
+        <div style="font-family:var(--sans);font-size:12.5px;font-weight:600">${s.genre}</div>
+        <span class="pill" style="background:transparent;color:${col};border:1px solid ${col}">${s.rights}</span></div>
+        <div style="font-family:var(--sans);font-size:11.5px;color:var(--muted);margin-top:3px">${s.licence} · ${s.ingested?"ingested":"not ingested"}</div>
+        <div style="font-family:var(--sans);font-size:11px;color:var(--muted);margin-top:2px">Provenance (internal): ${s.title}</div></div>`;
+    });
+  }
+  return h;
+}
+function wireWI(){ $$("#rightPanel .rtabs [data-wi]").forEach(b=>b.onclick=()=>{_wiView=b.dataset.wi;renderRight();}); }
+function previewHTML(preview){
+  const changed=preview.filter(b=>b._changed);
+  let h=`<div class="card"><div class="h">Proposed edits · ${changed.length} block(s)</div><div class="note" style="margin-bottom:0">Nothing has changed in your manuscript yet.</div></div>`;
+  changed.forEach((b,i)=>{
+    const beforeTxt = b._before ? (b._before.items?b._before.items.map(runText).join(" • "):runText(b._before.runs)) : "";
+    const afterTxt = b.items? b.items.map(runText).join(" • "):runText(b.runs);
+    h+=`<div class="card"><div style="font-family:var(--sans);font-size:11px;color:var(--muted);margin-bottom:6px">Before</div>
+      <div class="muted" style="font-size:14px;line-height:1.55;margin-bottom:10px">${escapeHTML(beforeTxt)}</div>
+      <div style="font-family:var(--sans);font-size:11px;color:var(--accent);margin-bottom:6px">After</div>
+      <div style="font-size:15px;line-height:1.55">${escapeHTML(afterTxt)}</div></div>`;
+  });
+  h+=`<div class="btnrow" style="position:sticky;bottom:0;background:var(--panel);padding:10px 0"><button class="btn primary" data-accept>Accept all</button><button class="btn" data-reject>Keep original</button><button class="btn" data-retry>Try another</button></div>`;
+  return h;
+}
+const escapeHTML=s=>(s||"").replace(/&/g,"&amp;").replace(/</g,"&lt;").replace(/>/g,"&gt;");
+
+function wireTabs(){ $$("#rightPanel .rtabs button[data-tab]").forEach(b=>b.onclick=()=>{S.panel=b.dataset.tab;renderRight();}); }
+function wirePanel(){
+  $$("#rightPanel [data-goto]").forEach(b=>b.onclick=()=>gotoBlock(+b.dataset.goto));
+  $$("#rightPanel [data-openfix]").forEach(b=>b.onclick=()=>openFixPanel());
+  $$("#rightPanel [data-fixpara]").forEach(b=>b.onclick=()=>runComposer(recommendedTasksFor(+b.dataset.fixpara),"block",+b.dataset.fixpara));
+  $$("#rightPanel [data-merge]").forEach(b=>b.onclick=()=>runComposer(["removeRepetition"],"block",+b.dataset.merge));
+  $$("#rightPanel [data-purpose]").forEach(b=>b.onclick=()=>askPurpose(+b.dataset.purpose,b));
+  $$("#rightPanel [data-usestyle]").forEach(b=>b.onclick=()=>{S.activeStyle=S.styles.find(s=>s.name===b.dataset.usestyle);buildModeBar();renderRight();});
+  $$("#rightPanel [data-createstyle]").forEach(b=>b.onclick=openCreateStyle);
+  const rng=$("#rightPanel [data-strength]"); if(rng)rng.oninput=()=>{S.styleStrength=+rng.value;renderRight();};
+}
+function wirePreview(){ const el=$("#rightPanel");
+  el.querySelector("[data-accept]").onclick=acceptPreview;
+  el.querySelector("[data-reject]").onclick=rejectPreview;
+  el.querySelector("[data-retry]").onclick=()=>{const idxs=S.pending.idxs;S.pending=null;runComposer(recommendedTasksFor(idxs[0]),"block",idxs[0]);};
+}
+function recommendedTasksFor(idx){
+  const p=S.analysis&&S.analysis.perPara.find(x=>x.index===idx); if(!p)return["removeRepetition"];
+  const t=new Set(["preserveVoice"]);
+  if(p.openings.diversity!=="High")t.add("fixOpenings");
+  if(p.emptiness.story.length)t.add("removeStorytelling");
+  if(p.emptiness.empty.length)t.add("removeEmpty");
+  if(p.lexical.words.length)t.add("removeRepetition");
+  if(p.formulaic.length)t.add("removeFormulaic");
+  return [...t];
+}
+function gotoBlock(i){ const el=editor.children[i]; if(el){el.scrollIntoView({behavior:"smooth",block:"center"});el.style.transition="background .3s";el.style.background="var(--accent-soft)";setTimeout(()=>el.style.background="",900);} }
+
+// §15: "What is this saying?" — model-backed one-line proposition + contribution tally
+async function askPurpose(idx,btn){
+  const target=$("#purpose-"+idx); if(!target)return;
+  const p=S.analysis.perPara.find(x=>x.index===idx); if(!p)return;
+  const contrib=analyseContribution(p.sentences);
+  target.innerHTML=`<div class="note" style="margin-top:8px">Reviewing…</div>`;
+  try{
+    const one=await callModel("ask",{system:"You are an editor. In at most 12 words, state the single proposition this paragraph exists to make. No preamble.",user:p.text});
+    const tally=`${contrib.total} sentences · ${contrib.substantive} substantive · ${contrib.items.filter(i=>i.kind==='repeats').length} repeating · ${contrib.items.filter(i=>['empty','decorative','transition'].includes(i.kind)).length} adding little`;
+    target.innerHTML=`<div style="margin-top:10px;padding:10px;background:var(--accent-soft);border-radius:8px;font-family:var(--sans);font-size:13px"><div style="font-weight:600;color:var(--accent);margin-bottom:4px">This paragraph is saying:</div>"${escapeHTML(one)}"<div style="font-size:10px;text-transform:uppercase;letter-spacing:.05em;color:var(--muted);margin-top:10px;margin-bottom:2px">Estimated sentence roles</div><div class="muted">${tally}</div></div>`;
+  }catch(e){
+    // graceful offline fallback: local contribution tally only
+    const tally=`${contrib.total} sentences · ${contrib.substantive} substantive · ${contrib.items.filter(i=>['empty','decorative','transition','repeats'].includes(i.kind)).length} adding little`;
+    target.innerHTML=`<div style="margin-top:10px" class="note">Offline — estimated sentence roles (local read): ${tally}</div>`;
+  }
+}
+
+/* ---------------------------------------------------------------------
+   O. STYLE LIBRARY — multi-sample, persisted (§7)
+   --------------------------------------------------------------------- */
+function openCreateStyle(){ openStyleModal(); }
+function openStyleModal(){
+  const m=document.createElement("div"); m.style.cssText="position:fixed;inset:0;background:rgba(37,34,41,.4);display:flex;align-items:center;justify-content:center;z-index:100";
+  m.innerHTML=`<div style="background:#fff;border-radius:14px;padding:24px;width:min(520px,92vw);font-family:var(--sans)">
+    <div style="font-size:17px;font-weight:700;margin-bottom:4px">Create a voice</div>
+    <div class="muted" style="font-size:13px;margin-bottom:16px">Add samples that represent this voice. HumanWrite reads their higher-level characteristics; it never copies phrases.</div>
+    <input class="txt" id="stName" placeholder="Voice name (e.g. My Book Voice)" style="margin-bottom:10px">
+    <div style="display:flex;gap:8px;margin-bottom:10px"><label class="btn" style="flex:1;text-align:center">Upload files<input type="file" id="stFiles" multiple accept=".txt,.md,.markdown,.docx" style="display:none"></label></div>
+    <div id="stList" style="font-size:12px;color:var(--muted);margin-bottom:10px"></div>
+    <textarea class="txt" id="stPaste" placeholder="…or paste one or more samples" style="min-height:90px;margin-bottom:14px"></textarea>
+    <div style="display:flex;gap:8px;justify-content:flex-end"><button class="btn" id="stCancel">Cancel</button><button class="btn primary" id="stGo">Analyse this voice</button></div>
+    <div id="stErr" class="err" style="display:none"></div></div>`;
+  document.body.appendChild(m);
+  const samples=[]; const list=m.querySelector("#stList");
+  m.querySelector("#stFiles").onchange=async e=>{ for(const f of e.target.files){ try{ const t=await readFileToText(f); samples.push({name:f.name,text:t}); }catch(_){ } } list.textContent=samples.map(s=>"✓ "+s.name).join("   "); };
+  m.querySelector("#stCancel").onclick=()=>m.remove();
+  m.querySelector("#stGo").onclick=async()=>{
+    const name=m.querySelector("#stName").value.trim(); const paste=m.querySelector("#stPaste").value.trim();
+    if(!name){m.querySelector("#stErr").style.display="block";m.querySelector("#stErr").textContent="Name the voice first.";return;}
+    const all=[...samples.map(s=>s.text),paste].filter(Boolean).join("\n\n---\n\n");
+    if(!all){m.querySelector("#stErr").style.display="block";m.querySelector("#stErr").textContent="Add at least one sample.";return;}
+    m.querySelector("#stGo").innerHTML='<span class="spinner"></span>Analysing…';
+    try{ const profile=await callModel("style",{sample:all});
+      const entry={name,profile,samples:(samples.length+(paste?1:0))};
+      S.styles=[...S.styles.filter(s=>s.name!==name),entry]; S.activeStyle=entry;
+      await idbPut("styles",entry); await persistMeta();
+      m.remove(); buildModeBar(); S.panel="style"; renderRight(); toast("Voice saved: "+name);
+    }catch(e){ m.querySelector("#stErr").style.display="block"; m.querySelector("#stErr").textContent=friendlyError(e); m.querySelector("#stGo").textContent="Analyse this voice"; }
+  };
+}
+
+/* ---------------------------------------------------------------------
+   P. IMPORT / EXPORT  (§9,§10)  DOCX via mammoth; DOCX export via HTML blob
+   --------------------------------------------------------------------- */
+async function readFileToText(f){
+  const ext=f.name.split(".").pop().toLowerCase();
+  if(["txt","md","markdown","csv"].includes(ext)) return await f.text();
+  if(ext==="html"||ext==="htm"){ const t=await f.text(); const d=document.createElement("div"); d.innerHTML=window.DOMPurify?DOMPurify.sanitize(t):t; return d.innerText; }
+  if(ext==="docx"){ await ensureMammoth(); const buf=await f.arrayBuffer(); const r=await window.mammoth.extractRawText({arrayBuffer:buf}); return r.value; }
+  throw new Error("Unsupported: ."+ext);
+}
+let _mammoth=null;
+function ensureMammoth(){ if(window.mammoth)return Promise.resolve(); if(_mammoth)return _mammoth;
+  _mammoth=new Promise((res,rej)=>{const s=document.createElement("script");s.src="https://cdnjs.cloudflare.com/ajax/libs/mammoth/1.6.0/mammoth.browser.min.js";s.onload=res;s.onerror=()=>rej(new Error("Could not load the DOCX reader."));document.head.appendChild(s);});
+  return _mammoth;
+}
+async function importFile(f){
+  const ext=f.name.split(".").pop().toLowerCase();
+  try{
+    if(ext==="docx"){ await ensureMammoth(); const buf=await f.arrayBuffer();
+      const r=await window.mammoth.convertToHtml({arrayBuffer:buf});
+      const clean=window.DOMPurify?DOMPurify.sanitize(r.value,{ALLOWED_TAGS:["p","h1","h2","h3","strong","b","em","i","u","s","ul","ol","li","blockquote","a","br"],ALLOWED_ATTR:["href"]}):r.value;
+      editor.innerHTML=clean; toast("Imported "+f.name+" · basic formatting kept; complex Word features may not transfer");
+    } else if(ext==="html"||ext==="htm"){ const t=await f.text(); editor.innerHTML=window.DOMPurify?DOMPurify.sanitize(t):t; toast("Imported "+f.name); }
+    else { const t=await f.text(); editor.innerHTML=t.split(/\n{2,}/).map(p=>`<p>${escapeHTML(p)}</p>`).join(""); toast("Imported "+f.name); }
+    S.title=f.name.replace(/\.[^.]+$/,""); onEdit(); runAnalysis();
+  }catch(e){ showErr(friendlyError(e)); }
+}
+/* Genuine .docx generation — builds a valid Open XML package (store-only ZIP,
+   no compression needed) from the block model, so headings, bold, italics,
+   underline and lists survive as real Word structures. This is a true .docx,
+   not HTML with a .doc extension. */
+function _crc32(buf){ let c,crc=0xFFFFFFFF; for(let i=0;i<buf.length;i++){ c=(crc^buf[i])&0xFF; for(let k=0;k<8;k++) c=c&1?(c>>>1)^0xEDB88320:c>>>1; crc=(crc>>>8)^c; } return (crc^0xFFFFFFFF)>>>0; }
+function _zipStore(files){
+  const u16=n=>{const b=new Uint8Array(2);b[0]=n&255;b[1]=(n>>8)&255;return b;};
+  const u32=n=>{const b=new Uint8Array(4);b[0]=n&255;b[1]=(n>>8)&255;b[2]=(n>>16)&255;b[3]=(n>>24)&255;return b;};
+  const cat=arrs=>{let len=0;arrs.forEach(a=>len+=a.length);const out=new Uint8Array(len);let o=0;arrs.forEach(a=>{out.set(a,o);o+=a.length;});return out;};
+  const enc=new TextEncoder();
+  const chunks=[],central=[]; let offset=0;
+  for(const f of files){
+    const name=enc.encode(f.name); const data=f.data; const crc=_crc32(data);
+    const local=cat([u32(0x04034b50),u16(20),u16(0),u16(0),u16(0),u16(0),u32(crc),u32(data.length),u32(data.length),u16(name.length),u16(0),name]);
+    chunks.push(local,data); central.push({name,crc,size:data.length,offset}); offset+=local.length+data.length;
+  }
+  const cdStart=offset; const cd=[];
+  for(const c of central) cd.push(cat([u32(0x02014b50),u16(20),u16(20),u16(0),u16(0),u16(0),u16(0),u32(c.crc),u32(c.size),u32(c.size),u16(c.name.length),u16(0),u16(0),u16(0),u16(0),u32(0),u32(c.offset),c.name]));
+  const cdBuf=cat(cd);
+  const end=cat([u32(0x06054b50),u16(0),u16(0),u16(central.length),u16(central.length),u32(cdBuf.length),u32(cdStart),u16(0)]);
+  return cat([...chunks,cdBuf,end]);
+}
+function _docxParagraph(runs,style){
+  const esc=s=>s.replace(/&/g,"&amp;").replace(/</g,"&lt;").replace(/>/g,"&gt;");
+  const r=runs.map(x=>{ const m=x.marks||[]; const rpr=m.length?`<w:rPr>${m.includes("bold")?"<w:b/>":""}${m.includes("italic")?"<w:i/>":""}${m.includes("underline")?'<w:u w:val="single"/>':""}${m.includes("strike")?"<w:strike/>":""}</w:rPr>`:""; return `<w:r>${rpr}<w:t xml:space="preserve">${esc(x.text)}</w:t></w:r>`; }).join("");
+  return `<w:p>${style?`<w:pPr><w:pStyle w:val="${style}"/></w:pPr>`:""}${r}</w:p>`;
+}
+function exportDocxReal(){
+  const enc=new TextEncoder();
+  const blocks=parseDoc();
+  const styleFor={heading1:"Heading1",heading2:"Heading2",heading3:"Heading3"};
+  const bodyParts=[];
+  blocks.forEach(b=>{
+    if(b.type==="list"){ b.items.forEach(it=>bodyParts.push(_docxParagraph(it,"ListParagraph"))); }
+    else if(b.type==="blockquote"){ bodyParts.push(_docxParagraph(b.runs,"Quote")); }
+    else bodyParts.push(_docxParagraph(b.runs,styleFor[b.type]||null));
+  });
+  const body=bodyParts.join("")||"<w:p/>";
+  const documentXml=`<?xml version="1.0" encoding="UTF-8" standalone="yes"?><w:document xmlns:w="http://schemas.openxmlformats.org/wordprocessingml/2006/main"><w:body>${body}<w:sectPr><w:pgSz w:w="11906" w:h="16838"/><w:pgMar w:top="1440" w:right="1440" w:bottom="1440" w:left="1440"/></w:sectPr></w:body></w:document>`;
+  const styles=`<?xml version="1.0" encoding="UTF-8" standalone="yes"?><w:styles xmlns:w="http://schemas.openxmlformats.org/wordprocessingml/2006/main"><w:style w:type="paragraph" w:styleId="Heading1"><w:name w:val="heading 1"/><w:pPr><w:outlineLvl w:val="0"/></w:pPr><w:rPr><w:b/><w:sz w:val="36"/></w:rPr></w:style><w:style w:type="paragraph" w:styleId="Heading2"><w:name w:val="heading 2"/><w:pPr><w:outlineLvl w:val="1"/></w:pPr><w:rPr><w:b/><w:sz w:val="30"/></w:rPr></w:style><w:style w:type="paragraph" w:styleId="Heading3"><w:name w:val="heading 3"/><w:pPr><w:outlineLvl w:val="2"/></w:pPr><w:rPr><w:b/><w:sz w:val="26"/></w:rPr></w:style><w:style w:type="paragraph" w:styleId="Quote"><w:name w:val="Quote"/><w:rPr><w:i/></w:rPr></w:style><w:style w:type="paragraph" w:styleId="ListParagraph"><w:name w:val="List Paragraph"/></w:style></w:styles>`;
+  const ct=`<?xml version="1.0" encoding="UTF-8" standalone="yes"?><Types xmlns="http://schemas.openxmlformats.org/package/2006/content-types"><Default Extension="rels" ContentType="application/vnd.openxmlformats-package.relationships+xml"/><Default Extension="xml" ContentType="application/xml"/><Override PartName="/word/document.xml" ContentType="application/vnd.openxmlformats-officedocument.wordprocessingml.document.main+xml"/><Override PartName="/word/styles.xml" ContentType="application/vnd.openxmlformats-officedocument.wordprocessingml.styles+xml"/></Types>`;
+  const rels=`<?xml version="1.0" encoding="UTF-8" standalone="yes"?><Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships"><Relationship Id="rId1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/officeDocument" Target="word/document.xml"/></Relationships>`;
+  const drels=`<?xml version="1.0" encoding="UTF-8" standalone="yes"?><Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships"><Relationship Id="rId1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/styles" Target="styles.xml"/></Relationships>`;
+  const zip=_zipStore([
+    {name:"[Content_Types].xml",data:enc.encode(ct)},
+    {name:"_rels/.rels",data:enc.encode(rels)},
+    {name:"word/document.xml",data:enc.encode(documentXml)},
+    {name:"word/styles.xml",data:enc.encode(styles)},
+    {name:"word/_rels/document.xml.rels",data:enc.encode(drels)}
+  ]);
+  downloadBlob(new Blob([zip],{type:"application/vnd.openxmlformats-officedocument.wordprocessingml.document"}), (S.title||"document")+".docx");
+}
+function exportWordHtml(){
+  // Honestly-labelled fallback: Word-compatible HTML with a .doc extension.
+  const html=`<!DOCTYPE html><html xmlns:o='urn:schemas-microsoft-com:office:office' xmlns:w='urn:schemas-microsoft-com:office:word'><head><meta charset='utf-8'><title>${escapeHTML(S.title)}</title></head><body>${editor.innerHTML}</body></html>`;
+  downloadBlob(new Blob([html],{type:"application/msword"}), (S.title||"document")+".doc");
+}
+function exportHTML(){ downloadBlob(new Blob([`<!DOCTYPE html><meta charset=utf-8><title>${escapeHTML(S.title)}</title>`+editor.innerHTML],{type:"text/html"}),(S.title||"document")+".html"); }
+function exportTxt(){ downloadBlob(new Blob([docText(parseDoc())],{type:"text/plain"}),(S.title||"document")+".txt"); }
+function downloadBlob(blob,name){ const u=URL.createObjectURL(blob); const a=document.createElement("a"); a.href=u; a.download=name; a.click(); setTimeout(()=>URL.revokeObjectURL(u),1000); }
+
+/* ---------------------------------------------------------------------
+   Q. VERSIONS, AUTOSAVE, OUTLINE, DOC INFO
+   --------------------------------------------------------------------- */
+let _versions=[];
+function snapshotVersion(label){ _versions=[{label,html:editor.innerHTML,at:Date.now()},..._versions].slice(0,10); renderVersions(); persistDoc(); }
+function renderVersions(){ const el=$("#versions"); if(!el)return;
+  if(!_versions.length){el.innerHTML=`<div class="docinfo">No saved versions yet.</div>`;return;}
+  el.innerHTML=_versions.map((v,i)=>`<div style="display:flex;justify-content:space-between;align-items:center;font-family:var(--sans);font-size:12px;padding:3px 0"><span class="muted">${v.label}</span><button class="btn" data-ver="${i}" style="padding:3px 8px">Restore</button></div>`).join("");
+  $$("#versions [data-ver]").forEach(b=>b.onclick=()=>{editor.innerHTML=_versions[+b.dataset.ver].html;onEdit();runAnalysis();});
+}
+let _saveTimer=null;
+function onEdit(){
+  renderOutline(); renderDocInfo();
+  clearTimeout(_saveTimer);
+  S.saveState="saving"; setStatus("Saving…");
+  _saveTimer=setTimeout(async()=>{ const ok=await persistDoc(); S.saveState=ok?"saved":"failed"; setStatus(ok?"Saved":"Not saved — retrying…"); if(!ok){ setTimeout(async()=>{ const retry=await persistDoc(); S.saveState=retry?"saved":"failed"; setStatus(retry?"Saved":"Not saved"); },2000); } },800);
+}
+async function persistDoc(){ try{ await idbPut("docs",{id:S.docId,title:S.title,projectId:S.projectId,html:editor.innerHTML,versions:_versions,at:Date.now()}); await persistMeta(); S.savedAt=Date.now(); fireDocChange(); return true; }catch(_){ return false; } }
+async function persistMeta(){ try{ await idbPut("meta",{key:"app",lastDoc:S.docId,styles:S.styles.map(s=>s.name),mode:S.mode,projectId:S.projectId,projectName:S.projectName,activeStyle:S.activeStyle?S.activeStyle.name:null}); return true; }catch(_){ return false; } }
+function setStatus(t){ const el=$("#saveStatus"); if(el)el.textContent=t; }
+function renderDocInfo(){
+  const blocks=parseDoc(); const words=tokenize(docText(blocks)).length; const sents=blocks.reduce((n,b)=>n+splitSentences(blockText(b)).length,0);
+  const label={saved:"Saved",saving:"Saving…",failed:"Not saved",unsaved:"Unsaved"}[S.saveState||"unsaved"];
+  const colour={saved:"var(--sage)",saving:"var(--muted)",failed:"var(--terra)",unsaved:"var(--muted)"}[S.saveState||"unsaved"];
+  const el=$("#docinfo"); if(el)el.innerHTML=`<span id="saveStatus" style="color:${colour}">${label}</span> · ${words} words<br>${sents} sentences · ${blocks.length} blocks · ~${Math.max(1,Math.round(words/220))} min read`;
+}
+function renderOutline(){
+  const el=$("#outline"); if(!el)return; const items=[];
+  [...editor.children].forEach((c,i)=>{const t=c.tagName&&c.tagName.toLowerCase(); if(["h1","h2","h3"].includes(t))items.push({level:t,text:c.textContent.slice(0,42),i});});
+  el.innerHTML=items.length?items.map(it=>`<div class="outline-item ${it.level}" data-out="${it.i}">${escapeHTML(it.text)||"Untitled"}</div>`).join(""):`<div class="docinfo">Add headings to build an outline.</div>`;
+  $$("#outline [data-out]").forEach(b=>b.onclick=()=>gotoBlock(+b.dataset.out));
+}
+
+/* ---------------------------------------------------------------------
+   R. UTILITIES + INIT
+   --------------------------------------------------------------------- */
+function setBusy(on,label){ const imp=[...document.querySelectorAll("#modebar button")].find(b=>b.textContent.includes("Improve")||b.querySelector);
+  if(on)toast(label||"Working…",true); else hideToast(); }
+let _toastTimer=null;
+function toast(msg,sticky){ const t=$("#toast"); t.textContent=msg; t.classList.add("show"); clearTimeout(_toastTimer); if(!sticky)_toastTimer=setTimeout(()=>t.classList.remove("show"),1800); }
+function hideToast(){ $("#toast").classList.remove("show"); }
+function showErr(msg){
+  let b=$("#errBanner");
+  if(!b){ b=document.createElement("div"); b.id="errBanner";
+    b.style.cssText="position:fixed;top:0;left:0;right:0;z-index:90;background:#F1E2DF;color:#7a3a30;font-family:var(--sans);font-size:13px;padding:12px 44px 12px 18px;box-shadow:0 2px 10px rgba(37,34,41,.12);line-height:1.5";
+    const x=document.createElement("button"); x.textContent="✕"; x.style.cssText="position:absolute;right:14px;top:10px;background:none;border:none;color:#7a3a30;font-size:15px;cursor:pointer"; x.onclick=()=>b.remove();
+    b.appendChild(document.createElement("span")); b.appendChild(x); document.body.appendChild(b);
+  }
+  b.querySelector("span").textContent=msg;
+  b.style.display="block";
+}
+
+const DEMO=`<h2>Why AI writing sounds formulaic</h2><p>AI changes how people work. AI also changes how people make decisions. AI creates new questions about accountability. AI therefore requires organisations to reconsider governance.</p><p>We live in a world where technology is changing faster than ever before. Every morning, millions of people wake up and enter a world increasingly shaped by artificial intelligence. These are not merely technological changes. They are deeply human changes.</p><p>The study found that participants struggled to trust AI outputs without verification. The study also revealed that users were reluctant to accept AI responses without checking them. The study further indicated that verification remained important because respondents did not automatically trust AI-generated answers. This suggests that trust is fragile. This means organisations must act. This highlights the importance of responsible AI use.</p>`;
+
+async function init(){
+  await openDB();
+  await loadIgnored();
+  // Load saved voices and metadata FIRST, so the voice selector shows them.
+  S.styles=await idbAll("styles");
+  const meta=await idbGet("meta","app");
+  if(meta){ if(meta.mode)S.mode=meta.mode; if(meta.projectId){S.projectId=meta.projectId;S.projectName=meta.projectName||S.projectName;} if(meta.activeStyle){ const found=S.styles.find(s=>s.name===meta.activeStyle); if(found)S.activeStyle=found; } }
+  buildToolbar(); buildModeBar();
+  let restored=false;
+  if(meta&&meta.lastDoc){ const d=await idbGet("docs",meta.lastDoc); if(d&&d.html){ S.docId=d.id; S.title=d.title||"Untitled document"; editor.innerHTML=d.html; _versions=d.versions||[]; restored=true; } }
+  if(!restored){ editor.innerHTML=""; } // clean empty start, no preloaded sample
+  editor.addEventListener("input",onEdit);
+  editor.addEventListener("keydown",e=>{ if((e.metaKey||e.ctrlKey)&&e.key.toLowerCase()==="s"){e.preventDefault();persistDoc().then(ok=>setStatus(ok?"Saved":"Not saved"));} });
+  $("#file").onchange=e=>{const f=e.target.files[0];if(f)importFile(f);e.target.value="";};
+  $("#btnMore").onclick=(e)=>{ e.stopPropagation(); const mm=$("#moreMenu"); mm.style.display=mm.style.display==="block"?"none":"block"; };
+  document.addEventListener("click",()=>{ const mm=$("#moreMenu"); if(mm)mm.style.display="none"; });
+  $$(".more-item[data-more]").forEach(it=>it.onclick=()=>{ const a=it.dataset.more; $("#moreMenu").style.display="none";
+    if(a==="projects")openProjects(); else if(a==="export")confirmExport(); else if(a==="focus")$("#bodyGrid").classList.toggle("focus"); });
+  $("#btnBack").onclick=goBack;
+  $("#btnFwd").onclick=goForward;
+  updateHistBtns();
+  const nd=$("#newDocBtn"); if(nd)nd.onclick=()=>newDoc("Blank");
+  renderVersions(); renderOutline(); renderDocInfo(); renderRight();
+  if(!restored) showEmptyState();
+  collapsePanel(); // writing-first — panel opens on review or diagnostic click
+  // Honest AI-availability status. Check now and again shortly (may inject late).
+  updateAIStatus(); setTimeout(updateAIStatus,1500); setTimeout(updateAIStatus,4000);
+}
+function updateAIStatus(){
+  const el=$("#aiStatus"); if(!el) return;
+  if(aiEditingAvailable()){ el.innerHTML=`<span style="color:var(--sage)">●</span> AI editing ready · `; }
+  else { el.innerHTML=`<span style="color:var(--gold)">●</span> Review works here · AI rewrites need Claude · `; }
+}
+function showEmptyState(){
+  editor.setAttribute("data-placeholder","Write, paste or upload something worth refining.");
+  const stage=$("#stage"); if($("#emptyHero")) return;
+  const hero=document.createElement("div"); hero.id="emptyHero"; hero.className="empty-hero";
+  hero.innerHTML=`<div class="mono-mark"><span class="hw">HW</span>HumanWrite</div>
+    <p>Write, paste or upload something worth refining.</p>
+    <div class="btnrow"><button class="btn primary" id="heroDemo">Load a demo</button><button class="btn" id="heroWrite">Start writing</button></div>`;
+  stage.appendChild(hero);
+  const clear=()=>{ const h=$("#emptyHero"); if(h)h.remove(); };
+  $("#heroWrite").onclick=()=>{ clear(); editor.focus(); };
+  $("#heroDemo").onclick=()=>{ clear(); editor.innerHTML=DEMO; onEdit(); runAnalysis(); };
+  editor.addEventListener("focus",clear,{once:true});
+  editor.addEventListener("input",clear,{once:true});
+}
+async function openProjects(){
+  const projects=await idbAll("projects");
+  if(!projects.find(p=>p.id===S.projectId)) await idbPut("projects",{id:S.projectId,name:S.projectName,at:Date.now()});
+  const allProjects=await idbAll("projects");
+  const allDocs=await idbAll("docs");
+  const m=document.createElement("div"); m.style.cssText="position:fixed;inset:0;background:rgba(37,34,41,.42);display:flex;align-items:center;justify-content:center;z-index:100";
+  const projRows=allProjects.sort((a,b)=>b.at-a.at).map(pr=>{
+    const docs=allDocs.filter(d=>(d.projectId||"proj-default")===pr.id);
+    const words=docs.reduce((n,d)=>{const t=document.createElement("div");t.innerHTML=d.html||"";return n+((t.innerText||"").trim().split(/\s+/).filter(Boolean).length);},0);
+    const active=pr.id===S.projectId;
+    const docList=docs.sort((a,b)=>b.at-a.at).map(d=>{
+      const t=document.createElement("div");t.innerHTML=d.html||"";const w=(t.innerText||"").trim().split(/\s+/).filter(Boolean).length;
+      return `<div style="display:flex;justify-content:space-between;padding:5px 0;border-top:1px solid var(--line);font-size:12.5px"><span style="cursor:pointer;color:var(--accent)" data-open="${d.id}">${escapeHTML(d.title||"Untitled")}</span><span class="muted">${w} words · ${new Date(d.at).toLocaleDateString(undefined,{month:"short",day:"numeric"})}</span></div>`;
+    }).join("")||`<div class="muted" style="font-size:12px;padding:5px 0">No documents yet.</div>`;
+    return `<div style="border:1px solid ${active?'var(--accent)':'var(--line)'};border-radius:12px;padding:14px;margin-bottom:10px;${active?'background:var(--accent-soft)':''}">
+      <div style="display:flex;justify-content:space-between;align-items:baseline">
+        <div style="font-weight:700;font-size:15px">${escapeHTML(pr.name)}${active?' <span style="font-size:10px;color:var(--accent);font-weight:600">· CURRENT</span>':''}</div>
+        <div class="muted" style="font-size:12px">${docs.length} document(s) · ${words} words</div>
+      </div>
+      ${docList}
+      <div style="margin-top:8px;display:flex;gap:6px">
+        ${active?'':`<button class="btn" data-switch="${pr.id}" style="font-size:12px">Switch to this book</button>`}
+        <button class="btn" data-newin="${pr.id}" style="font-size:12px">+ New document</button>
+      </div>
+    </div>`;
+  }).join("");
+  m.innerHTML=`<div style="background:#fff;border-radius:14px;padding:22px;width:min(640px,94vw);max-height:88vh;overflow:auto;font-family:var(--sans)">
+    <div style="display:flex;justify-content:space-between;align-items:baseline;margin-bottom:4px">
+      <div style="font-size:17px;font-weight:700">Your books</div>
+      <button class="btn primary" id="projNew" style="font-size:12px">+ New book</button>
+    </div>
+    <div style="font-size:12.5px;color:var(--muted);margin-bottom:16px">Work in progress across every project. Each book keeps its own documents.</div>
+    ${projRows}
+    <div style="text-align:right;margin-top:8px"><button class="btn" id="projClose">Close</button></div></div>`;
+  document.body.appendChild(m);
+  m.querySelector("#projClose").onclick=()=>m.remove();
+  m.querySelector("#projNew").onclick=async()=>{ const name=prompt("Name this book"); if(!name)return; const id="proj-"+Date.now(); await idbPut("projects",{id,name,at:Date.now()}); S.projectId=id;S.projectName=name; await persistMeta(); m.remove(); openProjects(); };
+  m.querySelectorAll("[data-switch]").forEach(b=>b.onclick=async()=>{ const pr=allProjects.find(p=>p.id===b.dataset.switch); S.projectId=pr.id;S.projectName=pr.name; await persistMeta(); m.remove(); toast("Switched to "+pr.name); renderRecents&&renderRecents(); });
+  m.querySelectorAll("[data-open]").forEach(b=>b.onclick=async()=>{ const d=await idbGet("docs",b.dataset.open); if(d){S.docId=d.id;S.title=d.title;S.projectId=d.projectId||S.projectId;editor.innerHTML=d.html;_versions=d.versions||[];onEdit();runAnalysis();m.remove();toast("Opened "+d.title);} });
+  m.querySelectorAll("[data-newin]").forEach(b=>b.onclick=async()=>{ S.projectId=b.dataset.newin; const pr=allProjects.find(p=>p.id===b.dataset.newin); if(pr)S.projectName=pr.name; m.remove(); newDoc("Blank"); });
+}
+window.renderRecents=null;
+
+function newDoc(type){
+  snapshotVersion("Previous document");
+  S.docId="doc-"+Date.now(); S.title="Untitled document"; _versions=[];
+  const seeds={ "Academic Article":"<h1>Title</h1><p></p>","Executive Brief":"<h2>Summary</h2><p></p>","Thought Leadership":"<h1>Headline</h1><p></p>","Blank":"" };
+  editor.innerHTML=seeds[type]||""; editor.setAttribute("data-placeholder","Write, paste or upload something worth refining.");
+  onEdit(); runAnalysis(); toast("New "+(type==="Blank"?"document":type.toLowerCase()));
+}
+function confirmExport(){
+  const m=document.createElement("div"); m.style.cssText="position:fixed;inset:0;background:rgba(37,34,41,.4);display:flex;align-items:center;justify-content:center;z-index:100";
+  m.innerHTML=`<div style="background:#fff;border-radius:14px;padding:22px;width:min(360px,92vw);font-family:var(--sans)"><div style="font-weight:700;font-size:16px;margin-bottom:12px">Export</div>
+    <div class="btnrow" style="flex-direction:column"><button class="btn full" data-x="docx">Word document (.docx)</button><button class="btn full" data-x="wordhtml">Word-compatible (.doc)</button><button class="btn full" data-x="html">HTML</button><button class="btn full" data-x="txt">Plain text</button><button class="btn full" data-x="copy">Copy to clipboard</button></div>
+    <button class="btn full" data-x="cancel" style="margin-top:10px">Cancel</button></div>`;
+  document.body.appendChild(m);
+  m.querySelectorAll("[data-x]").forEach(b=>b.onclick=()=>{const x=b.dataset.x;m.remove();
+    if(x==="docx")exportDocxReal();else if(x==="wordhtml")exportWordHtml();else if(x==="html")exportHTML();else if(x==="txt")exportTxt();else if(x==="copy"){navigator.clipboard?.writeText(docText(parseDoc()));toast("Copied.");}});
+}
+function openStyleModalHook(){}
+
+/* Bridge for the appended composer/marker module (§ single shared scope) */
+window.__hw={
+  runComposer, runAnalysis, setView, toast,
+  getAnalysis:()=>S.analysis, parseDoc, blockText, currentBlockIndex,
+  recommendedTasksFor, getStyles:()=>S.styles, getMode:()=>S.mode,
+  rewritePlain:(text,cfg)=>callModel("rewrite",{text,cfg}),
+  replaceBlockText:(idx,text)=>{ pushHistory(); snapshotVersion("Before edit"); const blocks=parseDoc(); const b=blocks[idx]; if(!b)return;
+    if(b.type==="list"){ b.items=[reattachMarks(text,b.items[0]||[])]; } else { b.runs=reattachMarks(text,b.runs); }
+    renderDoc(blocks); onEdit(); runAnalysis(); },
+  selectStyleByName:(name)=>{ const s=S.styles.find(x=>x.name.toLowerCase().includes(name.toLowerCase())); if(s){S.activeStyle=s;buildModeBar();toast("Voice: "+s.name);} },
+  runFreeform:async(text,scope)=>{ // interpret an arbitrary instruction via the model, non-destructively
+    const idx=scope==="document"?null:currentBlockIndex();
+    const blocks=parseDoc(); const targets= idx==null?blocks.map((_,i)=>i):[idx>=0?idx:0];
+    setBusy(true,"Working on your request…");
+    try{ const preview=blocks.map(b=>({...b,_changed:false}));
+      for(const t of targets){ const b=blocks[t]; if(!b)continue; const src=b.type==="list"?runText(b.items[0]||[]):runText(b.runs);
+        const sys="You are an editor. Apply the user's instruction to the passage. Preserve meaning, evidence and any technical terms. Never fabricate. Return only the revised passage.";
+        const out=await apiAsk(sys,"Instruction: "+text+"\n\nPassage:\n"+src);
+        if(b.type==="list") preview[t]={type:"list",ordered:b.ordered,items:[reattachMarks(out,b.items[0]||[])],_changed:true,_before:{type:"list",items:b.items,ordered:b.ordered}};
+        else preview[t]={type:b.type,runs:reattachMarks(out,b.runs),_changed:true,_before:{type:b.type,runs:b.runs}};
+      }
+      S.pending={preview,idxs:targets}; renderPreview(preview); setView("suggestions");
+    }catch(e){ showErr(friendlyError(e)); } finally{ setBusy(false); }
+  },
+  listDocs:()=>idbAll("docs"),
+  openDoc:async(id)=>{ const d=await idbGet("docs",id); if(d){S.docId=d.id;S.title=d.title;editor.innerHTML=d.html;_versions=d.versions||[];onEdit();runAnalysis();toast("Opened "+d.title);} },
+  setImprove:(fn)=>{_improveFn=fn;}, setCompareStyles:(fn)=>{_compareFn=fn;},
+  onDocChange:(cb)=>{_docChangeCbs.push(cb);},
+  ready:false
+};
+init().then(()=>{ _improveFn=_improveFn||improveDocument; window.__hw.ready=true; document.dispatchEvent(new Event("hw-ready")); });
+})();
+</script>
+<script>
+/* =====================================================================
+   S. COMPOSER, MARGIN-MARKERS, COMPARE STYLES, RECENTS, EMPTY STATE
+   Appended module — extends the app defined above via window.__hw and
+   globals shared in the same window scope.
+   ===================================================================== */
+(function(){
+"use strict";
+const $=s=>document.querySelector(s), $$=s=>[...document.querySelectorAll(s)];
+const editor=$("#editor");
+
+/* --- natural-language intent parser (unit-tested) --- */
+const TASK_WORDS=[
+  [/repeat|repetition|repeated/i,"removeRepetition"],
+  [/open(ing)?s?\b|begin|start.*same|same.*start/i,"fixOpenings"],
+  [/empty|atmosphere|storytelling|profound|flowery|fluff/i,"removeStorytelling"],
+  [/low.?info|adds? (?:little|nothing)|vague|says? nothing/i,"removeEmpty"],
+  [/formulaic|clich|ai.?slop|\bslop\b|generic/i,"removeFormulaic"],
+  [/clear|clarify|unclear|confusing/i,"clarify"],
+  [/tighten|shorten|concise|trim|wordy|wordiness/i,"tighten"],
+  [/\bflow\b|transition|connect/i,"improveFlow"],
+  [/direct|to the point|get to the point/i,"makeDirect"],
+  [/natural|mechanical|robotic|stiff/i,"makeNatural"],
+  [/argument|weak claim|unsupported/i,"strengthenArgument"],
+  [/paragraph opening|start.*paragraph/i,"fixParaOpenings"],
+  [/\bdeep\b|restructure|rework/i,"deepEdit"]
+];
+const SCOPE=[
+  [/\bselection|selected|highlighted\b/i,"selection"],
+  [/\b(whole|entire|full|document|manuscript|everything)\b/i,"document"],
+  [/\b(this|the) paragraph\b|\bhere\b/i,"block"]
+];
+function parseIntent(text){
+  const analyseOnly=/don.?t (rewrite|change|edit)|do not (rewrite|change|edit)|just show|show me what|find where|tell me|what.?s wrong|check whether|check if/i.test(text);
+  const preserve=/preserv|keep|leave.*(term|voice|alone)|don.?t.*(term|touch)/i.test(text);
+  const tasks=[]; TASK_WORDS.forEach(([rx,id])=>{if(rx.test(text)&&!tasks.includes(id))tasks.push(id);});
+  if(preserve&&!tasks.includes("preserveVoice"))tasks.push("preserveVoice");
+  let scope="block"; for(const [rx,s] of SCOPE){if(rx.test(text)){scope=s;break;}}
+  const sm=text.match(/(?:in|like|as) my ([a-z ]+?) (?:voice|style|writing)|sound(?:s)? like my ([a-z ]+)/i);
+  return {tasks,scope,analyseOnly,style:sm?(sm[1]||sm[2]||"").trim():null};
+}
+
+async function handleComposer(){
+  const input=$("#composerInput"); const text=input.value.trim(); if(!text) return;
+  const intent=parseIntent(text);
+  input.value="";
+  // style selection by name
+  if(intent.style && window.__hw.selectStyleByName){ window.__hw.selectStyleByName(intent.style); }
+  if(intent.analyseOnly){
+    window.__hw.runAnalysis(); window.__hw.setView("suggestions");
+    window.__hw.toast("Reviewing — no changes made."); return;
+  }
+  let tasks=intent.tasks;
+  if(!tasks.length){
+    // no recognised task + no style => ask the model to interpret the instruction directly
+    if(!intent.style){ return window.__hw.runFreeform(text,intent.scope); }
+    tasks=["preserveVoice"]; // pure style rewrite
+  }
+  window.__hw.runComposer(tasks,intent.scope);
+}
+
+/* --- MARGIN-MARKER IMPROVE: the restraint interaction --- */
+let MARKERS=[], MARKER_I=0;
+function markerColour(p){
+  const hasRep=p.lexical.words.length||p.openings.diversity!=="High";
+  const hasOpen=p.openings.diversity!=="High";
+  const hasEmpty=p.emptiness.story.length||p.emptiness.empty.length;
+  const kinds=[hasOpen&&"open",hasEmpty&&"empty",(p.lexical.words.length)&&"rep"].filter(Boolean);
+  return kinds.length>1?"mixed":(kinds[0]||"mixed");
+}
+function markerMessage(p){
+  const bits=[];
+  if(p.openings.diversity!=="High"){
+    const rw=p.openings.repeatedWord.filter(([,c])=>c>=2)[0];
+    bits.push({conf:p.openings.maxConsecutive>=3?"Strong signal":"Possible issue",
+      text:rw?`"${rw[0]}" begins ${rw[1]} sentences in this paragraph.`:"Several sentences open the same way."});
+  }
+  p.emptiness.story.length&&bits.push({conf:"Possible issue",text:"A passage here sets atmosphere without a concrete event or claim."});
+  p.emptiness.empty.length&&bits.push({conf:"Possible issue",text:"A sentence here gestures at significance without specifics."});
+  p.lexical.words.length&&bits.push({conf:"Editorial judgement required",text:`Repeated words: ${p.lexical.words.slice(0,3).map(w=>w.word).join(", ")}.`});
+  if(!bits.length)bits.push({conf:"Note",text:"This paragraph could read more tightly."});
+  return bits;
+}
+function placeMarkers(){
+  const g=$("#gutter"); if(!g)return; g.innerHTML="";
+  const a=window.__hw.getAnalysis(); if(!a)return;
+  const stage=$("#stage"); const stageTop=stage.getBoundingClientRect().top;
+  MARKERS=[];
+  a.perPara.filter(p=>p.health!=="Strong").forEach(p=>{
+    const el=editor.children[p.index]; if(!el)return;
+    const top=el.getBoundingClientRect().top-stageTop;
+    const dot=document.createElement("div");
+    dot.className="gutter-dot "+markerColour(p); dot.style.top=top+"px";
+    dot.title="Paragraph "+(p.index+1);
+    const idx=MARKERS.length;
+    dot.onclick=()=>openStep(idx);
+    g.appendChild(dot);
+    MARKERS.push({p,el,dot,msgs:markerMessage(p)});
+  });
+  if(MARKERS.length){ MARKER_I=0; openStep(0); }
+}
+function openStep(i){
+  if(!MARKERS.length)return; MARKER_I=(i+MARKERS.length)%MARKERS.length;
+  const m=MARKERS[MARKER_I]; const s=$("#stepper");
+  $$(".gutter-dot").forEach(d=>d.classList.remove("active")); m.dot.classList.add("active");
+  m.el.scrollIntoView({behavior:"smooth",block:"center"});
+  const confColour=c=>c==="Strong signal"?"var(--accent)":c==="Possible issue"?"var(--gold)":"var(--muted)";
+  const msgHTML=m.msgs.map(b=>`<div class="conf" style="color:${confColour(b.conf)}">${b.conf}</div><div class="body">${b.text}</div>`).join("");
+  s.innerHTML=`<div class="count">Attention ${MARKER_I+1} of ${MARKERS.length} · paragraph ${m.p.index+1}</div>
+    ${msgHTML}
+    <div class="row"><button class="btn primary" id="stFix">Improve this</button><button class="btn" id="stSkip">Leave it</button></div>
+    <div class="nav"><button id="stPrev">← Previous</button><button id="stDone">Done</button><button id="stNext">Next →</button></div>`;
+  s.classList.add("show");
+  $("#stFix").onclick=()=>{ window.__hw.runComposer(window.__hw.recommendedTasksFor(m.p.index),"block",m.p.index); s.classList.remove("show"); };
+  $("#stSkip").onclick=()=>advance(1);
+  $("#stPrev").onclick=()=>advance(-1); $("#stNext").onclick=()=>advance(1);
+  $("#stDone").onclick=()=>{ s.classList.remove("show"); $$(".gutter-dot").forEach(d=>d.classList.remove("active")); };
+}
+function advance(d){ if(MARKER_I+d<0||MARKER_I+d>=MARKERS.length){ $("#stepper").classList.remove("show"); return;} openStep(MARKER_I+d); }
+
+function improveWithMarkers(){
+  window.__hw.runAnalysis();
+  const a=window.__hw.getAnalysis();
+  const problems=a.perPara.filter(p=>p.health!=="Strong");
+  window.__hw.setView("suggestions");
+  if(!problems.length){ window.__hw.toast("No structural problems detected. Nothing to change."); return; }
+  placeMarkers();
+  window.__hw.toast(problems.length+" paragraph(s) worth your attention.");
+}
+window.addEventListener("scroll",()=>{ if($("#stepper")&&$("#stepper").classList.contains("show")) placeMarkers._skip=true; },true);
+
+/* --- COMPARE STYLES (§8) --- */
+async function compareStyles(){
+  const idx=window.__hw.currentBlockIndex();
+  const blocks=window.__hw.parseDoc();
+  const b=blocks[(idx!=null&&idx>=0)?idx:0]; if(!b){window.__hw.toast("Place your cursor in a paragraph.");return;}
+  const text=window.__hw.blockText(b);
+  const voices=[["Original",null],["Academic","Academic"],["Executive","Executive"],["Book / Long-form","Book / Long-form"]];
+  const styles=window.__hw.getStyles();
+  if(styles[0]) voices.splice(1,0,[styles[0].name,"__style:"+styles[0].name]);
+  const m=document.createElement("div"); m.style.cssText="position:fixed;inset:0;background:rgba(37,34,41,.42);display:flex;align-items:center;justify-content:center;z-index:100";
+  m.innerHTML=`<div style="background:#fff;border-radius:14px;padding:22px;width:min(820px,94vw);max-height:86vh;overflow:auto;font-family:var(--sans)">
+    <div style="font-size:17px;font-weight:700;margin-bottom:4px">Compare voices</div>
+    <div style="font-size:12.5px;color:var(--muted);margin-bottom:16px">The same paragraph in each voice. Choose one to replace it — nothing changes until you do.</div>
+    <div id="csGrid" style="display:grid;grid-template-columns:1fr 1fr;gap:12px"></div>
+    <div style="text-align:right;margin-top:14px"><button class="btn" id="csClose">Close</button></div></div>`;
+  document.body.appendChild(m); $("#csClose").onclick=()=>m.remove();
+  const grid=m.querySelector("#csGrid");
+  voices.forEach(([label])=>{ const c=document.createElement("div"); c.style.cssText="border:1px solid var(--line);border-radius:10px;padding:12px";
+    c.innerHTML=`<div style="font-size:11px;font-weight:700;color:var(--accent);margin-bottom:6px">${label.toUpperCase()}</div><div class="csTxt" style="font-family:var(--serif);font-size:14px;line-height:1.55;color:var(--ink)"><span class="spinner" style="border-top-color:var(--accent)"></span></div>`;
+    grid.appendChild(c); });
+  const cards=[...grid.children];
+  // Original renders instantly; alternatives generate concurrently and fill in.
+  const jobs=voices.map(([label,val],i)=>{
+    const txtEl=cards[i].querySelector(".csTxt");
+    if(val===null){ txtEl.textContent=text; return Promise.resolve(); }
+    let cfg={tasks:["preserveVoice"],mode:val&&val.startsWith("__style:")?window.__hw.getMode():(val||window.__hw.getMode()),intensity:"Standard Edit",styleProfile:"",styleStrength:0};
+    if(val&&val.startsWith("__style:")){ const st=window.__hw.getStyles().find(s=>s.name===val.slice(8)); if(st){cfg.styleProfile=st.profile;cfg.styleStrength=75;} }
+    else if(["Academic","Executive","Book / Long-form"].includes(val)) cfg.mode=val;
+    return window.__hw.rewritePlain(text,cfg).then(out=>{
+      txtEl.textContent=out;
+      const use=document.createElement("button"); use.className="btn primary"; use.textContent="Use this"; use.style.marginTop="10px";
+      use.onclick=()=>{ window.__hw.replaceBlockText((idx!=null&&idx>=0)?idx:0,out); m.remove(); window.__hw.toast("Paragraph replaced."); };
+      cards[i].appendChild(use);
+    }).catch(e=>{ txtEl.textContent="(could not generate — "+(e.message||"error")+")"; });
+  });
+  await Promise.allSettled(jobs);
+}
+
+/* --- RECENT DOCUMENTS rows --- */
+async function renderRecents(){
+  const host=$("#recents"); if(!host)return;
+  const docs=await window.__hw.listDocs();
+  if(!docs.length){ host.innerHTML=`<div class="docinfo">No recent documents.</div>`; return; }
+  host.innerHTML=docs.sort((a,b)=>b.at-a.at).slice(0,8).map(d=>{
+    const when=new Date(d.at).toLocaleDateString(undefined,{month:"short",day:"numeric"});
+    return `<div class="outline-item" data-doc="${d.id}" style="display:flex;justify-content:space-between"><span>${escapeHTMLlocal(d.title||"Untitled")}</span><span class="muted" style="font-size:11px">${when}</span></div>`;
+  }).join("");
+  host.querySelectorAll("[data-doc]").forEach(b=>b.onclick=()=>window.__hw.openDoc(b.dataset.doc));
+}
+const escapeHTMLlocal=s=>(s||"").replace(/&/g,"&amp;").replace(/</g,"&lt;").replace(/>/g,"&gt;");
+
+/* --- wire up --- */
+function wire(){
+  $("#composerSend").onclick=handleComposer;
+  $("#composerInput").addEventListener("keydown",e=>{ if(e.key==="Enter"){e.preventDefault();handleComposer();} });
+  // repoint Improve to the marker interaction
+  window.__hw.setImprove(improveWithMarkers);
+  window.__hw.setCompareStyles(compareStyles);
+  window.__hw.onDocChange(renderRecents);
+  renderRecents();
+}
+if(window.__hw&&window.__hw.ready) wire();
+else document.addEventListener("hw-ready",wire);
+})();
+</script>
+</body>
+</html>
