@@ -1,3 +1,4 @@
+export const dynamic = "force-dynamic";
 import { NextRequest, NextResponse } from "next/server";
 import { getProvider, aiConfigured } from "@/lib/ai";
 import { CompareStylesSchema } from "@/lib/schemas";

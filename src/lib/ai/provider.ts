@@ -17,6 +17,7 @@ export interface RewriteRequest {
   voiceProfile?: VoiceProfile | null;
   voiceStrength?: number; // 0..100
   principles?: WritingPrinciple[]; // retrieved, relevant principles only (§17, §18)
+  editorialContext?: string; // specification-aware context (Doc 1 §16)
   tier?: ModelTier;
 }
 

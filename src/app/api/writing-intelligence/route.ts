@@ -1,3 +1,4 @@
+export const dynamic = "force-dynamic";
 import { NextResponse } from "next/server";
 import { WRITING_INTELLIGENCE_CATEGORIES, WRITING_PRINCIPLES, SOURCE_REGISTRY } from "@/lib/intelligence/principles";
 

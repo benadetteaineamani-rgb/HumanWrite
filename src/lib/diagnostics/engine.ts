@@ -77,6 +77,41 @@ export function openingArchetype(sentence: string): string {
   return "other";
 }
 
+/**
+ * Parallel / anaphora repetition WITHIN a sentence (the "we come, we go, we eat,
+ * we sleep" and "how...how...how" case). Flagged with confidence, never
+ * auto-condemned — it may be deliberate rhetoric (anaphora) or mechanical
+ * padding. The genre profile decides how much this matters.
+ */
+export interface ParallelFinding { token: string; count: number; segments: number; confidence: string; note: string; }
+export function detectParallelRepetition(sentence: string): ParallelFinding[] {
+  const findings: ParallelFinding[] = [];
+  const lower = sentence.toLowerCase();
+  const segments = lower.split(/,\s*|\s+and\s+|\s+or\s+/).map((s) => s.trim()).filter(Boolean);
+  if (segments.length >= 3) {
+    const firsts = segments.map((seg) => tokenize(seg)[0] || "");
+    const counts: Record<string, number> = {};
+    firsts.forEach((w) => { if (w) counts[w] = (counts[w] || 0) + 1; });
+    for (const [w, c] of Object.entries(counts)) {
+      if (c >= 3) {
+        findings.push({
+          token: w, count: c, segments: segments.length,
+          confidence: c >= 4 ? "Strong signal" : "Editorial judgement required",
+          note: `"${w}" opens ${c} of ${segments.length} parallel clauses — deliberate emphasis (anaphora) or mechanical repetition? Your call.`,
+        });
+      }
+    }
+  }
+  const connectors = ["how","that","when","where","what","why","we","you","they","it"];
+  connectors.forEach((conn) => {
+    const n = (lower.match(new RegExp("\\b" + conn + "\\b", "gi")) || []).length;
+    if (n >= 4 && !findings.some((f) => f.token === conn)) {
+      findings.push({ token: conn, count: n, segments: 0, confidence: n >= 5 ? "Strong signal" : "Editorial judgement required", note: `"${conn}" appears ${n} times in one sentence — check whether the repetition earns its place.` });
+    }
+  });
+  return findings;
+}
+
 const FORMULAIC = ["at its core","in today's rapidly evolving","in an era defined by","as we navigate","in the ever-changing landscape","it is important to note that","it is worth noting that","interestingly,","crucially,","importantly,","ultimately,","taken together","what becomes clear is","this underscores","this highlights","this reflects","this demonstrates","this speaks to","this serves as a reminder","this raises important questions","the implications are far-reaching","only time will tell","moving forward","this is more than","it is not merely","the question is not whether","in a world where","now more than ever","the reality is that"];
 
 const ABSTRACT = new Set(("world technology future humanity possibility change transformation journey landscape era age innovation potential opportunity challenge reality truth meaning purpose vision impact power society people everyone something anything nothing thing things way ways development implications questions conversation moment significance importance changes").split(/\s+/));

@@ -1,3 +1,4 @@
+export const dynamic = "force-dynamic";
 import { NextRequest, NextResponse } from "next/server";
 import { getProvider, aiConfigured } from "@/lib/ai";
 import { RewriteSchema } from "@/lib/schemas";
@@ -42,6 +43,18 @@ export async function POST(req: NextRequest) {
   // Retrieve only relevant principles (§17, §18).
   const principles = retrievePrinciples({ documentType: input.documentType, tasks: input.tasks });
 
+  // Specification-aware context: load the document's spec if we have a documentId.
+  let editorialContext = "";
+  try {
+    const { buildEditorialContext } = await import("@/lib/intelligence/context");
+    if ((input as { documentId?: string }).documentId) {
+      const spec = await prisma.documentSpec.findUnique({ where: { documentId: (input as { documentId?: string }).documentId } });
+      editorialContext = buildEditorialContext(spec as never);
+    } else if (input.documentType) {
+      editorialContext = buildEditorialContext({ writingType: input.documentType } as never);
+    }
+  } catch { /* context is best-effort; never block an edit */ }
+
   // Load voice profile if requested (stored server-side, §15) — never re-send raw samples.
   let voiceProfile = null;
   if (input.voiceProfileId && user) {
@@ -62,6 +75,7 @@ export async function POST(req: NextRequest) {
       voiceProfile: voiceProfile as never,
       voiceStrength: input.voiceStrength,
       principles,
+      editorialContext,
       tier,
     });
     await recordUsage({ userId: user?.id ?? null, operation: "rewrite", model, latencyMs: Date.now() - started, success: true });

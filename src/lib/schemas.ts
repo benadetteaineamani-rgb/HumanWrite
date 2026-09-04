@@ -7,6 +7,7 @@ export const RewriteSchema = z.object({
   tasks: z.array(z.string()).min(1).max(12),
   mode: z.string().default("Academic"),
   intensity: z.string().default("Standard Edit"),
+  documentId: z.string().optional(),
   documentType: z.string().optional(),
   voiceProfileId: z.string().optional(),
   voiceStrength: z.number().min(0).max(100).optional(),
@@ -47,3 +48,27 @@ export const DocumentSchema = z.object({
 
 export type RewriteInput = z.infer<typeof RewriteSchema>;
 export type AnalyseInput = z.infer<typeof AnalyseSchema>;
+
+export const SpecSchema = z.object({
+  documentId: z.string(),
+  writingCategory: z.string().optional(),
+  writingType: z.string().default("general"),
+  subgenre: z.string().optional(),
+  purpose: z.array(z.string()).default([]),
+  audience: z.array(z.string()).default([]),
+  targetAgeMin: z.number().nullable().optional(),
+  targetAgeMax: z.number().nullable().optional(),
+  intendedOutcome: z.string().nullable().optional(),
+  centralArgument: z.string().nullable().optional(),
+  keyPoints: z.array(z.string()).default([]),
+  evidenceRequirements: z.array(z.string()).default([]),
+  tone: z.string().nullable().optional(),
+  voiceProfileId: z.string().nullable().optional(),
+  targetWordCount: z.number().nullable().optional(),
+  structuralRequirements: z.array(z.string()).default([]),
+  avoid: z.array(z.string()).default([]),
+  requiredTerminology: z.array(z.string()).default([]),
+  protectedText: z.array(z.string()).default([]),
+  citationRequirements: z.string().nullable().optional(),
+  additionalInstructions: z.string().nullable().optional(),
+});

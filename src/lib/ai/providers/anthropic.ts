@@ -56,6 +56,11 @@ ${tasks || "- Apply a careful standard edit."}
 MODE: ${req.mode}. ${MODE_GUIDANCE[req.mode] || ""}
 INTENSITY: ${req.intensity}. ${INTENSITY_GUIDANCE[req.intensity] || ""}`;
 
+    // Specification-aware context: what is being written, for whom, to what end (Doc 1 §16).
+    if (req.editorialContext) {
+      s += `\n\nDOCUMENT CONTEXT (assess and edit the writing against this):\n${req.editorialContext}`;
+    }
+
     // Retrieval layer supplies only relevant principles (§17, §18) — never the whole library.
     if (req.principles && req.principles.length) {
       s += `\n\nRELEVANT WRITING-INTELLIGENCE PRINCIPLES (apply as editorial guidance, not rules to force):\n`;
