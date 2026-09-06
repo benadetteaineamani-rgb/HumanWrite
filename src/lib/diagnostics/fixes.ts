@@ -82,3 +82,34 @@ export function buildFixSuggestions(a: DocumentDiagnostic, fullText: string): { 
 
   return { recommended, advanced };
 }
+
+import type { DiagPhrase } from "@/lib/editor/diagnosticMarks";
+
+/**
+ * Turn a document diagnostic into the specific phrases to underline inline.
+ * Only concrete, findable substrings are returned so the underline lands on the
+ * actual problem text.
+ */
+export function diagnosticPhrases(a: DocumentDiagnostic): DiagPhrase[] {
+  const phrases: DiagPhrase[] = [];
+  const seen = new Set<string>();
+  const add = (text: string, kind: DiagPhrase["kind"], note: string) => {
+    const key = kind + "|" + text.toLowerCase();
+    if (!text || text.length < 3 || seen.has(key)) return;
+    seen.add(key);
+    phrases.push({ text, kind, note });
+  };
+  a.paragraphs.forEach((p) => {
+    // repeated opening words -> underline the leading word where it repeats
+    if (p.openings.diversity !== "High") {
+      p.openings.repeatedWord.filter(([, c]) => c >= 2).forEach(([w, c]) => {
+        add(w, "opening", `"${w}" begins ${c} sentences in this paragraph — vary the openings.`);
+      });
+    }
+    // formulaic phrases
+    p.formulaic.forEach((f) => add(f.phrase, "formulaic", `Formulaic phrase — often adds little. Consider cutting.`));
+    // repeated content words
+    p.repeatedWords.slice(0, 2).forEach((w) => add(w.word, "repetition", `"${w.word}" repeats ${w.count}× — check whether each is needed.`));
+  });
+  return phrases;
+}

@@ -7,7 +7,8 @@ import Link from "@tiptap/extension-link";
 import Placeholder from "@tiptap/extension-placeholder";
 import { useState, useCallback } from "react";
 import { analyseDocument, DocumentDiagnostic, detectParallelRepetition } from "@/lib/diagnostics/engine";
-import { buildFixSuggestions, FixSuggestion } from "@/lib/diagnostics/fixes";
+import { buildFixSuggestions, FixSuggestion, diagnosticPhrases } from "@/lib/diagnostics/fixes";
+import { DiagnosticMarks, diagKey } from "@/lib/editor/diagnosticMarks";
 import { api, HumanWriteAPIError } from "@/lib/apiClient";
 import SpecPanel, { SpecState, emptySpec } from "./SpecPanel";
 import { BlockId } from "@/lib/editor/blockId";
@@ -27,7 +28,7 @@ export default function Editor() {
   const [purpose, setPurpose] = useState<Record<number, string>>({});
 
   const editor = useEditor({
-    extensions: [StarterKit, Underline, Link.configure({ openOnClick: false }), Placeholder.configure({ placeholder: "Write, paste or upload something worth refining." }), BlockId],
+    extensions: [StarterKit, Underline, Link.configure({ openOnClick: false }), Placeholder.configure({ placeholder: "Write, paste or upload something worth refining." }), BlockId, DiagnosticMarks],
     content: "",
     immediatelyRender: false,
     editable: true,
@@ -35,13 +36,24 @@ export default function Editor() {
 
   const runReview = useCallback(() => {
     if (!editor) return;
-    setDiag(analyseDocument(editor.getText()));
+    const d = analyseDocument(editor.getText());
+    setDiag(d);
+    // feed inline underlines and refresh decorations
+    const ext = editor.extensionManager.extensions.find((e) => e.name === "diagnosticMarks");
+    if (ext) { ext.options.phrases = diagnosticPhrases(d); ext.options.enabled = true; editor.view.dispatch(editor.state.tr.setMeta(diagKey, true)); }
   }, [editor]);
+
+  function setMarksEnabled(on: boolean) {
+    if (!editor) return;
+    const ext = editor.extensionManager.extensions.find((e) => e.name === "diagnosticMarks");
+    if (ext) { ext.options.enabled = on; editor.view.dispatch(editor.state.tr.setMeta(diagKey, on)); }
+  }
 
   function switchMode(m: Mode) {
     setMode(m);
     if (editor) editor.setEditable(m === "write" || m === "edit");
     if (m === "review") runReview();
+    else setMarksEnabled(false);
   }
 
   async function runTasks(tasks: string[], scope: "document" | "block") {
