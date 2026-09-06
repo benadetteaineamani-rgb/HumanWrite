@@ -9,11 +9,14 @@ import { useState } from "react";
  */
 
 const WRITING_TYPES: { category: string; options: { id: string; label: string }[] }[] = [
-  { category: "Academic & Research", options: [{ id: "thesis", label: "Thesis / chapter" }, { id: "academic-article", label: "Journal article" }] },
-  { category: "Fiction", options: [{ id: "novel", label: "Novel / literary fiction" }] },
+  { category: "Academic & Research", options: [{ id: "thesis", label: "Thesis / chapter" }, { id: "academic-article", label: "Journal article" }, { id: "literature-review", label: "Literature review" }, { id: "research-report", label: "Research report" }] },
+  { category: "Fiction", options: [{ id: "novel", label: "Novel / literary fiction" }, { id: "short-story", label: "Short story" }, { id: "childrens-fiction", label: "Children's fiction" }] },
+  { category: "Non-fiction Book", options: [{ id: "nonfiction-book", label: "General non-fiction" }, { id: "popular-science", label: "Popular science" }, { id: "business-book", label: "Business / leadership" }, { id: "memoir", label: "Memoir" }, { id: "biography", label: "Biography / autobiography" }, { id: "self-development", label: "Self-development" }, { id: "narrative-nonfiction", label: "Narrative non-fiction" }, { id: "investigative", label: "Investigative non-fiction" }, { id: "textbook", label: "Textbook / educational" }] },
   { category: "Children's Writing", options: [{ id: "childrens-story", label: "Children's story" }] },
-  { category: "Professional & Executive", options: [{ id: "executive-report", label: "Executive report" }] },
-  { category: "Public & Thought Leadership", options: [{ id: "linkedin", label: "LinkedIn post" }] },
+  { category: "Professional & Executive", options: [{ id: "executive-report", label: "Executive report" }, { id: "strategy-paper", label: "Strategy paper" }, { id: "proposal", label: "Proposal / white paper" }] },
+  { category: "Public & Thought Leadership", options: [{ id: "linkedin", label: "LinkedIn post" }, { id: "linkedin-article", label: "LinkedIn article" }, { id: "opinion", label: "Opinion / commentary" }, { id: "speech", label: "Speech / keynote" }] },
+  { category: "Educational", options: [{ id: "lesson", label: "Lesson / teaching material" }] },
+  { category: "Reflective / Personal", options: [{ id: "reflective", label: "Reflective / personal essay" }] },
   { category: "Creative & Other", options: [{ id: "poetry", label: "Poetry" }] },
   { category: "General", options: [{ id: "general", label: "General document" }] },
 ];

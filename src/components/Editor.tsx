@@ -7,9 +7,11 @@ import Link from "@tiptap/extension-link";
 import Placeholder from "@tiptap/extension-placeholder";
 import { useState, useCallback } from "react";
 import { analyseDocument, DocumentDiagnostic, detectParallelRepetition } from "@/lib/diagnostics/engine";
+import { buildFixSuggestions, FixSuggestion } from "@/lib/diagnostics/fixes";
 import { api, HumanWriteAPIError } from "@/lib/apiClient";
 import SpecPanel, { SpecState, emptySpec } from "./SpecPanel";
 import { BlockId } from "@/lib/editor/blockId";
+import { exportDocx, htmlToExportBlocks, downloadBlob } from "@/lib/export";
 
 type Mode = "write" | "edit" | "review" | "preview";
 
@@ -21,6 +23,8 @@ export default function Editor() {
   const [busy, setBusy] = useState(false);
   const [spec, setSpec] = useState<SpecState>(emptySpec());
   const [showSpec, setShowSpec] = useState(false);
+  const [showFix, setShowFix] = useState(false);
+  const [purpose, setPurpose] = useState<Record<number, string>>({});
 
   const editor = useEditor({
     extensions: [StarterKit, Underline, Link.configure({ openOnClick: false }), Placeholder.configure({ placeholder: "Write, paste or upload something worth refining." }), BlockId],
@@ -40,24 +44,16 @@ export default function Editor() {
     if (m === "review") runReview();
   }
 
-  async function improve() {
+  async function runTasks(tasks: string[], scope: "document" | "block") {
     if (!editor) return;
-    runReview();
     const text = editor.getText();
     if (!text.trim()) { setBanner("Write something first."); return; }
-    setBusy(true); setBanner(null);
+    setBusy(true); setBanner(null); setShowFix(false);
     try {
-      const { proposal } = await api.rewrite({
-        text,
-        tasks: ["fixOpenings", "removeRepetition", "removeEmpty", "preserveVoice"],
-        mode: "Academic",
-        intensity: "Standard Edit",
-        documentType: spec.writingType,
-        scope: "document",
-      });
+      const { proposal } = await api.rewrite({ text, tasks: [...tasks, "preserveVoice"], mode: "Academic", intensity: "Standard Edit", documentType: spec.writingType, scope });
       setProposal({ original: text, revised: proposal });
       setMode("review");
-    } catch (e: unknown) {
+    } catch (e) {
       setBanner(e instanceof HumanWriteAPIError ? e.message : "The edit could not complete. Your text is unchanged.");
     } finally { setBusy(false); }
   }
@@ -69,10 +65,34 @@ export default function Editor() {
     runReview();
   }
 
+  async function askPurpose(idx: number, text: string) {
+    setPurpose((m) => ({ ...m, [idx]: "..." }));
+    try {
+      const { answer } = await api.editorialQuestion({ question: "In at most 12 words, state the single proposition this paragraph exists to make. No preamble.", text });
+      setPurpose((m) => ({ ...m, [idx]: answer }));
+    } catch {
+      setPurpose((m) => ({ ...m, [idx]: "(needs a connection to answer)" }));
+    }
+  }
+
+  async function exportWord() {
+    if (!editor) return;
+    try {
+      const blocks = htmlToExportBlocks(editor.getHTML());
+      const blob = await exportDocx("HumanWrite document", blocks);
+      downloadBlob(blob, "humanwrite-document.docx");
+    } catch { setBanner("Export failed. Please try again."); }
+  }
+
   const genreLabel = spec.writingType.replace(/-/g, " ");
+  const fixes = diag && editor ? buildFixSuggestions(diag, editor.getText()) : null;
+  const tb = (label: string, active: boolean, fn: () => void) => (
+    <button onMouseDown={(e) => { e.preventDefault(); fn(); }}
+      style={{ minWidth: 30, height: 28, borderRadius: 6, border: "1px solid var(--line)", background: active ? "var(--accent)" : "#fff", color: active ? "#fff" : "var(--ink)", cursor: "pointer", fontSize: 13, padding: "0 8px" }}>{label}</button>
+  );
 
   return (
-    <div style={{ display: "grid", gridTemplateColumns: mode === "preview" ? "1fr" : "minmax(0,1fr) 360px", gap: 24, padding: 24 }}>
+    <div style={{ display: "grid", gridTemplateColumns: mode === "preview" ? "1fr" : "minmax(0,1fr) 380px", gap: 24, padding: 24 }}>
       {banner && (
         <div className="banner err">{banner}
           <button onClick={() => setBanner(null)} style={{ position: "absolute", right: 14, top: 10, background: "none", border: "none", color: "#7a3a30", fontSize: 15, cursor: "pointer" }}>x</button>
@@ -87,9 +107,31 @@ export default function Editor() {
           ))}
           <span style={{ width: 1, background: "var(--line)", alignSelf: "stretch", margin: "2px 4px" }} />
           <button className="btn" onClick={() => setShowSpec(true)}>Spec my work</button>
-          <button className="btn primary" onClick={improve} disabled={busy}>{busy ? "Revising..." : "Improve"}</button>
+          <button className="btn" onClick={() => { runReview(); setShowFix(true); }}>Fix</button>
+          <button className="btn primary" onClick={() => runTasks(["fixOpenings", "removeRepetition", "removeEmpty"], "document")} disabled={busy}>{busy ? "Revising..." : "Improve"}</button>
+          <button className="btn" onClick={exportWord}>Export .docx</button>
           <span style={{ marginLeft: "auto", fontSize: 12, color: "var(--muted)" }}>Type: <b style={{ color: "var(--accent)", textTransform: "capitalize" }}>{genreLabel}</b></span>
         </div>
+
+        {(mode === "write" || mode === "edit") && editor && (
+          <div className="sans" style={{ display: "flex", gap: 4, marginBottom: 10, flexWrap: "wrap", padding: "8px 10px", background: "var(--panel)", borderRadius: 8 }}>
+            {tb("B", editor.isActive("bold"), () => editor.chain().focus().toggleBold().run())}
+            {tb("I", editor.isActive("italic"), () => editor.chain().focus().toggleItalic().run())}
+            {tb("U", editor.isActive("underline"), () => editor.chain().focus().toggleUnderline().run())}
+            {tb("S", editor.isActive("strike"), () => editor.chain().focus().toggleStrike().run())}
+            <span style={{ width: 1, background: "var(--line)", margin: "2px 4px" }} />
+            {tb("H1", editor.isActive("heading", { level: 1 }), () => editor.chain().focus().toggleHeading({ level: 1 }).run())}
+            {tb("H2", editor.isActive("heading", { level: 2 }), () => editor.chain().focus().toggleHeading({ level: 2 }).run())}
+            {tb("H3", editor.isActive("heading", { level: 3 }), () => editor.chain().focus().toggleHeading({ level: 3 }).run())}
+            <span style={{ width: 1, background: "var(--line)", margin: "2px 4px" }} />
+            {tb("• List", editor.isActive("bulletList"), () => editor.chain().focus().toggleBulletList().run())}
+            {tb("1. List", editor.isActive("orderedList"), () => editor.chain().focus().toggleOrderedList().run())}
+            {tb("Quote", editor.isActive("blockquote"), () => editor.chain().focus().toggleBlockquote().run())}
+            <span style={{ width: 1, background: "var(--line)", margin: "2px 4px" }} />
+            {tb("↶", false, () => editor.chain().focus().undo().run())}
+            {tb("↷", false, () => editor.chain().focus().redo().run())}
+          </div>
+        )}
 
         {mode === "preview" ? (
           <div style={{ background: "var(--canvas)", border: "1px solid var(--line)", borderRadius: 10, padding: "48px 56px", maxWidth: 760, margin: "0 auto", minHeight: "60vh" }}
@@ -109,7 +151,7 @@ export default function Editor() {
               <div style={{ display: "flex", gap: 8, marginTop: 10 }}>
                 <button className="btn primary" onClick={acceptProposal}>Accept</button>
                 <button className="btn" onClick={() => setProposal(null)}>Reject</button>
-                <button className="btn" onClick={improve} disabled={busy}>Try again</button>
+                <button className="btn" onClick={() => runTasks(["fixOpenings", "removeRepetition", "removeEmpty"], "document")} disabled={busy}>Try again</button>
               </div>
             </div>
           ) : diag ? (
@@ -130,6 +172,10 @@ export default function Editor() {
                     {p.emptyStory > 0 && <div style={{ fontSize: 12.5, color: "var(--muted)", marginTop: 4 }}>{p.emptyStory} passage(s) of atmosphere without a concrete event.</div>}
                     {parallels.length > 0 && <div style={{ fontSize: 12.5, color: "var(--muted)", marginTop: 4 }}>Parallel repetition: {parallels[0].note}</div>}
                     {p.health === "Strong" && p.openings.diversity === "High" && parallels.length === 0 && <div style={{ fontSize: 12.5, color: "var(--sage)", marginTop: 4 }}>Specific and clear. No edit recommended.</div>}
+                    <div style={{ marginTop: 8 }}>
+                      <button className="btn" style={{ fontSize: 12 }} onClick={() => askPurpose(p.index, p.text)}>What is this saying?</button>
+                    </div>
+                    {purpose[p.index] && <div style={{ marginTop: 8, padding: 8, background: "var(--accent-soft)", borderRadius: 6, fontSize: 12.5 }}><b style={{ color: "var(--accent)" }}>This paragraph is saying:</b> {purpose[p.index]}</div>}
                   </div>
                 );
               })}
@@ -141,6 +187,36 @@ export default function Editor() {
       )}
 
       {showSpec && <SpecPanel spec={spec} onChange={setSpec} onClose={() => setShowSpec(false)} />}
+
+      {showFix && fixes && (
+        <div style={{ position: "fixed", inset: 0, background: "rgba(37,34,41,.42)", display: "flex", alignItems: "center", justifyContent: "center", zIndex: 100 }} className="sans">
+          <div style={{ background: "#fff", borderRadius: 14, padding: 22, width: "min(600px,94vw)", maxHeight: "88vh", overflow: "auto" }}>
+            <div style={{ fontSize: 17, fontWeight: 700 }}>What to fix</div>
+            <div style={{ fontSize: 12.5, color: "var(--muted)", marginBottom: 12 }}>Grounded in established editorial principles. Each suggestion points at the specific place in your text.</div>
+            {[["Recommended", fixes.recommended], ["Advanced", fixes.advanced]].map(([label, list]) => (
+              <div key={label as string}>
+                <div style={{ fontSize: 10, textTransform: "uppercase", letterSpacing: ".06em", color: "var(--muted)", margin: "14px 0 6px" }}>{label as string}</div>
+                {(list as FixSuggestion[]).map((s) => (
+                  <div key={s.id} style={{ border: "1px solid var(--line)", borderRadius: 10, padding: 12, marginBottom: 8, opacity: s.found ? 1 : 0.6 }}>
+                    <div style={{ display: "flex", justifyContent: "space-between", alignItems: "baseline", gap: 10 }}>
+                      <div style={{ fontWeight: 600, fontSize: 14 }}>{s.title}</div>
+                      {s.found && <button className="btn primary" style={{ fontSize: 12 }} onClick={() => runTasks(s.tasks, "document")}>Fix this</button>}
+                    </div>
+                    <div style={{ fontSize: 12.5, color: "var(--muted)", marginTop: 3, fontStyle: "italic" }}>{s.principle}</div>
+                    <div style={{ fontSize: 11, color: "var(--accent)", marginTop: 2 }}>{s.source}</div>
+                    {s.found ? (
+                      <ul style={{ margin: "6px 0 0", paddingLeft: 18, fontSize: 12.5 }}>{s.evidence.slice(0, 4).map((e, i) => <li key={i}>{e}</li>)}</ul>
+                    ) : (
+                      <div style={{ fontSize: 12, color: "var(--sage)", marginTop: 4 }}>Nothing of this kind found. No change needed.</div>
+                    )}
+                  </div>
+                ))}
+              </div>
+            ))}
+            <div style={{ textAlign: "right", marginTop: 12 }}><button className="btn" onClick={() => setShowFix(false)}>Close</button></div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }
