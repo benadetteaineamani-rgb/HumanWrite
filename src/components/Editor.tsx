@@ -8,13 +8,14 @@ import Placeholder from "@tiptap/extension-placeholder";
 import { useState, useCallback } from "react";
 import { analyseDocument, DocumentDiagnostic, detectParallelRepetition } from "@/lib/diagnostics/engine";
 import { buildFixSuggestions, FixSuggestion, diagnosticPhrases } from "@/lib/diagnostics/fixes";
+import { buildLessons, dimensionSummary, Lesson } from "@/lib/diagnostics/teaching";
 import { DiagnosticMarks, diagKey } from "@/lib/editor/diagnosticMarks";
 import { api, HumanWriteAPIError } from "@/lib/apiClient";
 import SpecPanel, { SpecState, emptySpec } from "./SpecPanel";
 import { BlockId } from "@/lib/editor/blockId";
 import { exportDocx, htmlToExportBlocks, downloadBlob } from "@/lib/export";
 
-type Mode = "write" | "edit" | "review" | "preview";
+type Mode = "write" | "edit" | "review" | "learn" | "preview";
 
 export default function Editor() {
   const [mode, setMode] = useState<Mode>("write");
@@ -26,6 +27,7 @@ export default function Editor() {
   const [showSpec, setShowSpec] = useState(false);
   const [showFix, setShowFix] = useState(false);
   const [purpose, setPurpose] = useState<Record<number, string>>({});
+  const [lessons, setLessons] = useState<Lesson[]>([]);
 
   const editor = useEditor({
     extensions: [StarterKit, Underline, Link.configure({ openOnClick: false }), Placeholder.configure({ placeholder: "Write, paste or upload something worth refining." }), BlockId, DiagnosticMarks],
@@ -53,6 +55,13 @@ export default function Editor() {
     setMode(m);
     if (editor) editor.setEditable(m === "write" || m === "edit");
     if (m === "review") runReview();
+    else if (m === "learn") {
+      if (!editor) return;
+      const d = analyseDocument(editor.getText());
+      setDiag(d);
+      setLessons(buildLessons(d, editor.getText()));
+      setMarksEnabled(false);
+    }
     else setMarksEnabled(false);
   }
 
@@ -113,7 +122,7 @@ export default function Editor() {
 
       <main>
         <div className="sans" style={{ display: "flex", gap: 6, marginBottom: 12, alignItems: "center", flexWrap: "wrap" }}>
-          {(["write", "edit", "review", "preview"] as Mode[]).map((m) => (
+          {(["write", "edit", "review", "learn", "preview"] as Mode[]).map((m) => (
             <button key={m} onClick={() => switchMode(m)}
               style={{ padding: "6px 12px", borderRadius: 7, border: "none", background: mode === m ? "var(--accent)" : "transparent", color: mode === m ? "#fff" : "var(--muted)", fontWeight: mode === m ? 600 : 400, cursor: "pointer", textTransform: "capitalize" }}>{m}</button>
           ))}
@@ -165,6 +174,31 @@ export default function Editor() {
                 <button className="btn" onClick={() => setProposal(null)}>Reject</button>
                 <button className="btn" onClick={() => runTasks(["fixOpenings", "removeRepetition", "removeEmpty"], "document")} disabled={busy}>Try again</button>
               </div>
+            </div>
+          ) : mode === "learn" ? (
+            <div>
+              <h3 style={{ fontSize: 14 }}>Learn</h3>
+              <p style={{ fontSize: 12, color: "var(--muted)", marginBottom: 10 }}>HumanWrite teaches the writing rather than replacing it. Each note names the problem, the principle, and invites you to revise — but you can always ask it to rewrite instead.</p>
+              <div style={{ display: "flex", flexWrap: "wrap", gap: 5, marginBottom: 12 }}>
+                {dimensionSummary(lessons).map((d) => (
+                  <span key={d.dimension} style={{ fontSize: 11, padding: "3px 8px", borderRadius: 20, background: d.issues ? "var(--accent-soft)" : "#E4EAE4", color: d.issues ? "var(--accent)" : "var(--sage)" }}>{d.dimension}{d.issues ? ` · ${d.issues}` : " ✓"}</span>
+                ))}
+              </div>
+              {lessons.length === 0 ? (
+                <div style={{ fontSize: 13, color: "var(--sage)" }}>No teaching notes for this draft — the writing is clear on the dimensions HumanWrite checks. Keep going.</div>
+              ) : lessons.map((l) => (
+                <div key={l.id} style={{ background: "#fff", border: "1px solid var(--line)", borderRadius: 8, padding: 12, marginBottom: 10 }}>
+                  <div style={{ fontSize: 11, textTransform: "uppercase", letterSpacing: ".05em", color: "var(--accent)", fontWeight: 700 }}>{l.dimension}</div>
+                  <div style={{ fontSize: 13.5, fontWeight: 600, marginTop: 4 }}>{l.problem}</div>
+                  <div style={{ fontSize: 12.5, color: "var(--muted)", marginTop: 6 }}><b>Principle.</b> {l.principle}</div>
+                  <div style={{ fontSize: 12.5, marginTop: 6, padding: 8, background: "var(--accent-soft)", borderRadius: 6 }}><b>Try this.</b> {l.tryThis}</div>
+                  {l.evidence.length > 0 && <div style={{ fontSize: 11.5, color: "var(--muted)", marginTop: 6 }}>In your text: {l.evidence.slice(0, 3).join("; ")}</div>}
+                  <div style={{ display: "flex", gap: 8, marginTop: 8 }}>
+                    <button className="btn" style={{ fontSize: 12 }} onClick={() => switchMode("write")}>I&apos;ll rewrite it</button>
+                    <button className="btn primary" style={{ fontSize: 12 }} onClick={() => runTasks(l.rewriteTasks, "document")} disabled={busy}>Rewrite for me</button>
+                  </div>
+                </div>
+              ))}
             </div>
           ) : diag ? (
             <div>
