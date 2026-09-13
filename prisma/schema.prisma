@@ -14,7 +14,12 @@ datasource db {
 model User {
   id            String          @id // matches Supabase auth user id
   email         String?         @unique
+  isAdmin       Boolean         @default(false)
+  accessStatus  String          @default("PENDING") // PENDING | APPROVED | REJECTED
+  plan          String          @default("PILOT")   // PILOT | PAID (payment wired later)
+  name          String?
   createdAt     DateTime        @default(now())
+  approvedAt    DateTime?
   documents     Document[]
   voiceProfiles VoiceProfile[]
   projects      Project[]

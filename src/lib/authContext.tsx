@@ -18,6 +18,8 @@ interface AuthState {
   signUp: (email: string, password: string) => Promise<{ error?: string; needsConfirmation?: boolean }>;
   signIn: (email: string, password: string) => Promise<{ error?: string }>;
   signOut: () => Promise<void>;
+  requestPasswordReset: (email: string) => Promise<{ error?: string }>;
+  updatePassword: (newPassword: string) => Promise<{ error?: string }>;
 }
 
 const AuthContext = createContext<AuthState | null>(null);
@@ -57,8 +59,23 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     setUser(null);
   }, [supabase]);
 
+  const requestPasswordReset = useCallback(async (email: string) => {
+    if (!supabase) return { error: "Accounts are not enabled yet." };
+    const redirectTo = typeof window !== "undefined" ? `${window.location.origin}/reset-password` : undefined;
+    const { error } = await supabase.auth.resetPasswordForEmail(email, { redirectTo });
+    if (error) return { error: error.message };
+    return {};
+  }, [supabase]);
+
+  const updatePassword = useCallback(async (newPassword: string) => {
+    if (!supabase) return { error: "Accounts are not enabled yet." };
+    const { error } = await supabase.auth.updateUser({ password: newPassword });
+    if (error) return { error: error.message };
+    return {};
+  }, [supabase]);
+
   return (
-    <AuthContext.Provider value={{ user, loading, configured, signUp, signIn, signOut }}>
+    <AuthContext.Provider value={{ user, loading, configured, signUp, signIn, signOut, requestPasswordReset, updatePassword }}>
       {children}
     </AuthContext.Provider>
   );
