@@ -8,12 +8,13 @@ import Placeholder from "@tiptap/extension-placeholder";
 import { useState, useCallback } from "react";
 import { analyseDocument, DocumentDiagnostic, detectParallelRepetition } from "@/lib/diagnostics/engine";
 import { buildFixSuggestions, FixSuggestion, diagnosticPhrases } from "@/lib/diagnostics/fixes";
-import { buildLessons, dimensionSummary, Lesson } from "@/lib/diagnostics/teaching";
+import { buildGroundedLessons, dimensionSummary, Lesson } from "@/lib/diagnostics/teaching";
 import { DiagnosticMarks, diagKey } from "@/lib/editor/diagnosticMarks";
 import { api, HumanWriteAPIError } from "@/lib/apiClient";
 import SpecPanel, { SpecState, emptySpec } from "./SpecPanel";
 import { BlockId } from "@/lib/editor/blockId";
 import { exportDocx, htmlToExportBlocks, downloadBlob } from "@/lib/export";
+import { useDocumentPersistence } from "@/lib/useDocumentPersistence";
 
 type Mode = "write" | "edit" | "review" | "learn" | "preview";
 
@@ -28,12 +29,23 @@ export default function Editor() {
   const [showFix, setShowFix] = useState(false);
   const [purpose, setPurpose] = useState<Record<number, string>>({});
   const [lessons, setLessons] = useState<Lesson[]>([]);
+  const [title, setTitle] = useState("Untitled document");
+  const { saveState, scheduleSave } = useDocumentPersistence();
 
   const editor = useEditor({
     extensions: [StarterKit, Underline, Link.configure({ openOnClick: false }), Placeholder.configure({ placeholder: "Write, paste or upload something worth refining." }), BlockId, DiagnosticMarks],
     content: "",
     immediatelyRender: false,
     editable: true,
+    onUpdate: ({ editor }) => {
+      scheduleSave({
+        title,
+        documentType: spec.writingType,
+        contentJson: editor.getJSON(),
+        plainText: editor.getText(),
+        writingMode: "Academic",
+      });
+    },
   });
 
   const runReview = useCallback(() => {
@@ -59,7 +71,7 @@ export default function Editor() {
       if (!editor) return;
       const d = analyseDocument(editor.getText());
       setDiag(d);
-      setLessons(buildLessons(d, editor.getText()));
+      setLessons(buildGroundedLessons(d, editor.getText(), spec.writingType));
       setMarksEnabled(false);
     }
     else setMarksEnabled(false);
@@ -132,6 +144,9 @@ export default function Editor() {
           <button className="btn primary" onClick={() => runTasks(["fixOpenings", "removeRepetition", "removeEmpty"], "document")} disabled={busy}>{busy ? "Revising..." : "Improve"}</button>
           <button className="btn" onClick={exportWord}>Export .docx</button>
           <span style={{ marginLeft: "auto", fontSize: 12, color: "var(--muted)" }}>Type: <b style={{ color: "var(--accent)", textTransform: "capitalize" }}>{genreLabel}</b></span>
+          <span style={{ fontSize: 11.5, color: saveState.status === "saved" ? "var(--sage)" : saveState.status === "error" ? "var(--terra)" : saveState.status === "signedout" ? "var(--gold)" : "var(--muted)" }}>
+            {saveState.status === "saving" ? "Saving..." : saveState.status === "saved" ? "Saved" : saveState.status === "signedout" ? "Sign in to save" : saveState.status === "error" ? "Not saved" : ""}
+          </span>
         </div>
 
         {(mode === "write" || mode === "edit") && editor && (

@@ -103,3 +103,27 @@ export function dimensionSummary(lessons: Lesson[]): { dimension: WritingDimensi
   const dims: WritingDimension[] = ["Ideas", "Argument", "Structure", "Paragraphs", "Sentences", "Vocabulary", "Voice", "Editing"];
   return dims.map((d) => ({ dimension: d, issues: lessons.filter((l) => l.dimension === d).length }));
 }
+
+import { improvementsFor } from "./writingIntelligence";
+
+/**
+ * Genre-aware lessons: the base lessons PLUS grounded, attributed craft
+ * principles prioritised for the selected writing type. Each carries both the
+ * teaching prompt (lesson) and the best-way improvement guidance, with its
+ * source. This is the "both" the writer asked for — checks and lessons, grounded
+ * in the best guidance for that type of writing.
+ */
+export function buildGroundedLessons(a: DocumentDiagnostic, fullText: string, writingType: string): Lesson[] {
+  const base = buildLessons(a, fullText);
+  const imps = improvementsFor(a, writingType).filter((i) => i.priority >= 0.4).slice(0, 4);
+  const grounded: Lesson[] = imps.map((i, n) => ({
+    id: "grounded-" + n,
+    dimension: "Argument" as WritingDimension,
+    problem: i.weakLabel,
+    principle: `${i.improvement}  (Grounded in: ${i.source}.)`,
+    tryThis: i.lesson,
+    evidence: [],
+    rewriteTasks: ["deepEdit"],
+  }));
+  return [...base, ...grounded];
+}

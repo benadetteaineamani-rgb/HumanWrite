@@ -11,13 +11,27 @@ import { prisma } from "@/lib/db";
  */
 export async function GET() {
   const user = await getUser();
-  if (!user) return NextResponse.json({ documents: [] });
-  const documents = await prisma.document.findMany({
+  if (!user) return NextResponse.json({ documents: [], shared: [] });
+  const owned = await prisma.document.findMany({
     where: { userId: user.id },
-    select: { id: true, title: true, documentType: true, updatedAt: true },
+    select: { id: true, title: true, documentType: true, plainText: true, updatedAt: true, createdAt: true },
     orderBy: { updatedAt: "desc" },
   });
-  return NextResponse.json({ documents });
+  // documents shared with this user (via membership), best-effort if table exists
+  let shared: { id: string; title: string; documentType: string; role: string; updatedAt: Date }[] = [];
+  try {
+    const memberships = await prisma.documentMember.findMany({
+      where: { userId: user.id },
+      select: { role: true, document: { select: { id: true, title: true, documentType: true, updatedAt: true } } },
+    });
+    shared = memberships.map((m: { role: string; document: { id: string; title: string; documentType: string; updatedAt: Date } }) => ({ id: m.document.id, title: m.document.title, documentType: m.document.documentType, role: m.role as string, updatedAt: m.document.updatedAt }));
+  } catch { /* collaboration tables not migrated yet */ }
+  const documents = owned.map((d: { id: string; title: string; documentType: string; plainText: string; updatedAt: Date; createdAt: Date }) => ({
+    id: d.id, title: d.title, documentType: d.documentType,
+    words: (d.plainText || "").trim() ? (d.plainText || "").trim().split(/\s+/).length : 0,
+    updatedAt: d.updatedAt, createdAt: d.createdAt,
+  }));
+  return NextResponse.json({ documents, shared });
 }
 
 export async function POST(req: NextRequest) {

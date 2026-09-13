@@ -38,6 +38,7 @@ export default function Home() {
           HumanWrite
         </div>
         <div className="sans" style={{ fontSize: 12, color: "var(--muted)" }}>A structural writing studio</div>
+        <a href="/dashboard" className="sans" style={{ fontSize: 13, color: "var(--accent)", textDecoration: "none", marginLeft: 16 }}>Command Centre</a>
         <AccountControl />
       </header>
       <Editor />
